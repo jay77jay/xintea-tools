@@ -109,7 +109,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-16-2';
+const APP_VERSION = 'v2026-11-16-3';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
@@ -158,6 +158,27 @@ function meta(p){
   const lastChange = src.map(s => s.changeDate).concat((p.alerts||[]).map(a => a.at)).filter(Boolean).sort().pop() || '';
   const billed = src.filter(s => s.billedManual);
   return {added, arrive, custom, alerts, lastChange, billedAll: src.length && billed.length === src.length, billedSome: billed.length > 0, billedTag: billed.length ? billedLabel(billed[0].billedManual) : ''};
+}
+/** 分批回報：reports 為每一批 {date, lines, boxes, note, by, at}；舊資料只有 done 時視為一批 */
+const repsOf = p => p.reports || (p.done ? [p.done] : []);
+function progress(p){
+  const ord = {}, rep = {}, sg = p.sgRecv || {};
+  (p.lines||[]).forEach(l => ord[l.sku] = num(l.qty));
+  repsOf(p).forEach(r => (r.lines||[]).forEach(l => rep[l.sku] = (rep[l.sku]||0) + num(l.qty)));
+  const tOrd = Object.values(ord).reduce((a,b) => a+b, 0), tRep = Object.values(rep).reduce((a,b) => a+b, 0);
+  const tSg = Object.keys(ord).reduce((a,k) => a + num(sg[k]), 0);
+  return {ord, rep, sg, tOrd, tRep, tSg, hasSg: !!p.sgRecv};
+}
+/** 由各批回報算出整張的完成紀錄（全部做完才有 done；入帳日＝最後一批完成日） */
+function rollup(p, reps, forceDone){
+  const ord = {}; (p.lines||[]).forEach(l => ord[l.sku] = num(l.qty));
+  const sum = {}, boxes = {};
+  reps.forEach(r => { (r.lines||[]).forEach(l => sum[l.sku] = (sum[l.sku]||0) + num(l.qty)); Object.entries(r.boxes||{}).forEach(([k,v]) => boxes[k] = (boxes[k]||0) + num(v)); });
+  const full = Object.keys(ord).every(k => (sum[k]||0) >= ord[k]);
+  if (!(full || forceDone) || !reps.length) return {status:'open', done:null};
+  const last = reps.map(r => r.date).sort().pop();
+  return {status:'done', done:{date:last, lines:(p.lines||[]).map(l => ({sku:l.sku, name:l.name||'', qty:sum[l.sku]||0})), boxes,
+    handling: boxTotals(boxes).handling, note: reps.map(r => r.note).filter(Boolean).join('；'), batches: reps.length, by: reps[reps.length-1].by, at: new Date().toISOString()}};
 }
 /** ERP 工序登記用單號：只列沒有手動入帳的生產單號；沒有生產單號才用配送單號 */
 function erpNo(p){
@@ -271,12 +292,16 @@ function renderList(){
 }
 function itemHtml({p, m}){
   const qty = (p.lines||[]).reduce((s,l) => s + num(l.qty), 0);
-  const st = p.status === 'done' ? `<span class="tag ok">已完成 ${esc(md(p.done?.date))}</span>` : `<span class="tag wait">待回報</span>`;
+  const pg = progress(p);
+  const st = p.status === 'done' ? `<span class="tag ok">已完成 ${esc(md(p.done?.date))}</span>`
+    : pg.tRep > 0 ? `<span class="tag wait">進行中 ${pg.tRep}／${pg.tOrd}</span>` : `<span class="tag wait">待回報</span>`;
+  const sgWarn = p.status !== 'done' && pg.hasSg && pg.tSg > pg.tRep ? `<span class="tag" style="background:#fdecea;color:#c62828">SG 已接收 ${pg.tSg}，待補回報</span>` : '';
+  const bar = p.status !== 'done' && pg.tRep > 0 ? `<div style="height:6px;background:#eee;border-radius:3px;margin-top:6px"><div style="height:6px;border-radius:3px;background:var(--g);width:${Math.min(100, pg.tRep/pg.tOrd*100)}%"></div></div>` : '';
   const al = m.alerts.length ? `<div class="alertbar">⚠ 生產單異動 ${m.alerts.length} 項：${esc(m.alerts[0].text.replace(/^生產單 \S+ 列印後有異動：/, ''))}${m.alerts.length > 1 ? '…' : ''}</div>` : '';
   return `<button class="po-item${m.alerts.length ? ' alert' : ''}${m.custom ? ' cus' : ''}" data-po="${esc(p.po)}">${al}<div class="in">
-    <b>${esc(p.po)}</b>${st}${m.custom ? '<span class="tag cus">客製</span>' : ''}${m.billedAll ? `<span class="tag billed">${m.billedTag}</span>` : m.billedSome ? `<span class="tag billed">部分${m.billedTag}</span>` : ''}<br>
+    <b>${esc(p.po)}</b>${st}${m.custom ? '<span class="tag cus">客製</span>' : ''}${m.billedAll ? `<span class="tag billed">${m.billedTag}</span>` : m.billedSome ? `<span class="tag billed">部分${m.billedTag}</span>` : ''}${sgWarn}<br>
     <span>${esc(p.customer||'')}</span> · <span class="mut">${(p.lines||[]).map(l => esc(l.sku) + '×' + l.qty).join('、')}（共 ${qty}）</span>
-    <div class="meta"><span>新增 <b>${esc(m.added || '—')}</b></span><span>最早到貨 <b>${esc(md(m.arrive) || '—')}</b></span><span>製作 ${esc(md(p.date))}</span></div>
+    <div class="meta"><span>新增 <b>${esc(m.added || '—')}</b></span><span>最早到貨 <b>${esc(md(m.arrive) || '—')}</b></span><span>製作 ${esc(md(p.date))}</span></div>${bar}
   </div></button>`;
 }
 
@@ -290,9 +315,10 @@ async function openForm(poNo){
   try { p = await Store.get(poNo); } catch(e){ el.innerHTML = `<div class="msg err">讀取失敗：${esc(e.message)}</div>`; return; }
   if (!p){ el.innerHTML = `<div class="msg err">找不到採購單 ${esc(poNo)}。\n可能還沒同步進系統，請通知 Jay。</div><button class="btn gray" id="back">回清單</button>`; $('back').onclick = renderList; return; }
   const m = meta(p);
-  const d = p.done || {};
-  const qtyOf = sku => { const x = (d.lines||[]).find(l => l.sku === sku); return x ? x.qty : null; };
-  const boxes = Object.assign({}, d.boxes || {});
+  const reps = repsOf(p);
+  const pg = progress(p);
+  const remain = sku => Math.max(0, (pg.ord[sku]||0) - (pg.rep[sku]||0));
+  const boxes = {};
   const srcHtml = s => {
     const mt = matOf(s);
     const base = BOM.boms[s.sku]?.items || {};
@@ -313,67 +339,91 @@ async function openForm(poNo){
   const stdSrc = srcOf(p).filter(s => !(s.custom || s.changeText));
   el.innerHTML = `<div class="card">
     <button class="btn gray" id="back" style="padding:6px 12px;font-size:13px">← 清單</button>
-    <h2 style="margin-top:10px">${esc(p.po)} ${m.custom ? '<span class="tag cus">客製</span>' : ''} ${p.status === 'done' ? '<span class="tag ok">已回報，修改後再送出會覆蓋</span>' : ''}</h2>
+    <h2 style="margin-top:10px">${esc(p.po)} ${m.custom ? '<span class="tag cus">客製</span>' : ''} ${p.status === 'done' ? '<span class="tag ok">已全部做完</span>' : pg.tRep ? `<span class="tag wait">進行中 ${pg.tRep}／${pg.tOrd}</span>` : ''}</h2>
     <div>${esc(p.customer||'')}</div>
     <div class="meta"><span>新增 <b>${esc(m.added||'—')}</b></span><span>最早到貨 <b>${esc(md(m.arrive)||'—')}</b></span><span>製作 ${esc(md(p.date))}</span></div>
     ${m.alerts.length ? `<div class="redbox"><div class="t">⚠ 生產單有異動，製作前請確認</div>${m.alerts.map(a => `<div>・${esc(a.text)} <span class="mut">${esc(a.at)}</span></div>`).join('')}
       <button class="btn red" id="ack" style="margin-top:8px;padding:7px 14px;font-size:14px">我已確認異動</button></div>` : ''}
     ${cusSrc.length ? `<div class="cusbox"><div class="t">★ 客製化／特殊注意事項</div>${cusSrc.map(srcHtml).join('')}</div>` : ''}
     ${stdSrc.length ? `<div class="card" style="background:#fafafa;margin:10px 0"><div class="mut" style="margin-bottom:4px">標準品</div>${stdSrc.map(srcHtml).join('')}</div>` : ''}
-    <h3>完成日期</h3>
-    <p class="mut" style="margin:-4px 0 6px;color:#c62828">請填實際做完的日期（隔天補回報要改日期），月底依這天入帳。</p>
-    <input type="date" id="fDate" value="${esc(d.date || today())}">
-    <h3>實際數量（跟採購單不同才改）</h3>
-    <div class="lines">${(p.lines||[]).map((l,i) => `<div class="ln"><div class="nm"><b>${esc(l.sku)}</b><br><span class="mut">${esc(l.name||'')}</span><br><span class="mut">採購單 ${l.qty}</span></div>
-      <input type="number" inputmode="numeric" min="0" data-i="${i}" class="fQty" value="${qtyOf(l.sku) ?? l.qty}"></div>`).join('')}</div>
-    <h3>用了幾箱</h3>
+    <h3>製作進度</h3>
+    <div class="lines">${(p.lines||[]).map(l => `<div class="ln"><div class="nm"><b>${esc(l.sku)}</b> <span class="mut">${esc(l.name||'')}</span></div>
+      <div style="text-align:right;white-space:nowrap"><b>${pg.rep[l.sku]||0}</b>／${l.qty}${pg.hasSg ? `<br><span class="mut">SG 已接收 ${num(pg.sg[l.sku])}</span>` : ''}</div></div>`).join('')}</div>
+    ${reps.length ? `<h3>已回報的批次</h3>${reps.map((r,i) => `<div class="sum" style="display:flex;gap:8px;align-items:center"><div style="flex:1">
+      第 ${i+1} 批　<b>${esc(r.date)}</b>　${(r.lines||[]).filter(l => num(l.qty)).map(l => esc(l.sku) + '×' + l.qty).join('、') || '—'}<br>
+      <span class="mut">${Object.entries(r.boxes||{}).map(([k,v]) => k + ' ' + v).join('、') || '未填箱數'}${r.note ? '　' + esc(r.note) : ''}　${esc(r.by||'')}</span></div>
+      <button class="btn gray delrep" data-i="${i}" style="padding:6px 10px;font-size:13px">刪除</button></div>`).join('')}` : ''}
+    ${p.status === 'done' ? `<div class="msg ok">這張已全部做完，${esc(p.done.date)} 入帳。若有追加或改錯，刪除批次後重新回報。</div>` : `
+    <h3>回報這一批</h3>
+    <p class="mut" style="margin:-4px 0 6px;color:#c62828">完成日期請填實際做完的日期。整張全部做完後，依最後一批的完成日入帳。</p>
+    <input type="date" id="fDate" value="${esc(today())}">
+    <h3>這批做好的數量</h3>
+    <div class="lines">${(p.lines||[]).map((l,i) => `<div class="ln"><div class="nm"><b>${esc(l.sku)}</b><br><span class="mut">還沒做 ${remain(l.sku)}</span></div>
+      <input type="number" inputmode="numeric" min="0" data-i="${i}" class="fQty" value="${remain(l.sku)}"></div>`).join('')}</div>
+    <h3>這批用了幾箱 <span class="mut">（還沒裝箱可以先不填，最後一批前要填）</span></h3>
     <div class="boxes">${BOX_TYPES.map(b => `<div class="bx" data-k="${b.k}"><div class="lb">${b.k}<small>${b.carton ? '紙箱' : '件數'}</small></div>
       <button data-d="-1">−</button><span class="v">0</span><button data-d="1">＋</button></div>`).join('')}</div>
     <div class="sum" id="sum"></div>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="fForce" style="width:auto"> 數量比採購單少，但這張已經全部做完（不會再做）</label>
     <h3>備註（選填）</h3>
-    <textarea id="fNote" rows="2" placeholder="例如：少做 2 盒、換素面提袋">${esc(d.note||'')}</textarea>
+    <textarea id="fNote" rows="2" placeholder="例如：少做 2 盒、換素面提袋"></textarea>
     <div id="fMsg"></div>
-    <div class="bar"><button class="btn" id="fSubmit">送出完成回報</button></div>
+    <div class="bar"><button class="btn" id="fSubmit">送出這批回報</button></div>`}
   </div>`;
   $('back').onclick = renderList;
   if ($('ack')) $('ack').onclick = async () => {
     const keys = [...new Set([...(p.ack||[]), ...m.alerts.map(alertKey)])];
     await Store.save(p.po, {ack: keys}); openForm(p.po);
   };
+  const saveReps = async (newReps, force) => {
+    const r = rollup(p, newReps, force);
+    await Store.save(p.po, {reports: newReps, status: r.status, done: r.done, forceDone: !!force, sync: Object.assign({}, p.sync, {sheet:false})});
+    return r;
+  };
+  el.querySelectorAll('.delrep').forEach(b => b.onclick = async () => {
+    const i = +b.dataset.i;
+    if (b.dataset.ok !== '1'){ b.dataset.ok = '1'; b.textContent = '確定刪除？'; b.classList.add('red'); return; }
+    await saveReps(reps.filter((_, j) => j !== i), false); openForm(p.po);
+  });
+  if (p.status === 'done') return;
   const drawBoxes = () => {
     el.querySelectorAll('.bx').forEach(x => { const v = num(boxes[x.dataset.k]); x.querySelector('.v').textContent = v; x.classList.toggle('has', v > 0); });
     const t = boxTotals(boxes);
     const ct = Object.entries(t.cartons).map(([k,v]) => `${k} ${v}`).join('、');
-    $('sum').innerHTML = `訂單處理費：<b>${t.handling}</b> 件　紙箱：<b>${ct || '無'}</b>`;
+    $('sum').innerHTML = `這批 訂單處理費：<b>${t.handling}</b> 件　紙箱：<b>${ct || '無'}</b>`;
   };
   el.querySelectorAll('.bx button').forEach(b => b.onclick = () => {
     const k = b.closest('.bx').dataset.k; boxes[k] = Math.max(0, num(boxes[k]) + num(b.dataset.d)); drawBoxes();
   });
   drawBoxes();
   $('fSubmit').onclick = async () => {
-    const date = $('fDate').value;
+    const date = $('fDate').value, force = $('fForce').checked;
     const lines = [...el.querySelectorAll('.fQty')].map(inp => ({sku: p.lines[inp.dataset.i].sku, name: p.lines[inp.dataset.i].name || '', qty: num(inp.value)}));
     const t = boxTotals(boxes);
     const errs = [];
     if (!date) errs.push('請填完成日期。');
     if (lines.some(l => l.qty < 0 || !Number.isInteger(l.qty))) errs.push('數量要是 0 以上的整數。');
-    if (!t.handling) errs.push('請輸入用了幾箱（至少 1）。');
+    if (!lines.some(l => l.qty > 0) && !force) errs.push('這批數量都是 0。');
+    const cleanBoxes = Object.fromEntries(Object.entries(boxes).filter(([,v]) => num(v) > 0));
+    const rec = {date, lines, boxes: cleanBoxes, handling: t.handling, note: $('fNote').value.trim(), by: user ? (user.displayName || user.email) : '試用', at: new Date().toISOString()};
+    const newReps = [...reps, rec];
+    const r = rollup(p, newReps, force);
+    if (r.status === 'done' && !r.done.handling) errs.push('全部做完了，請填用了幾箱（所有批次合計至少 1）。');
     if (errs.length){ $('fMsg').innerHTML = `<div class="msg err">${errs.join('\n')}</div>`; return; }
-    const diff = lines.filter((l,i) => l.qty !== num(p.lines[i].qty));
-    const sig = JSON.stringify(diff);
-    if (diff.length && $('fSubmit').dataset.ok !== sig){
-      $('fMsg').innerHTML = `<div class="msg warn">以下數量跟採購單不同：\n${diff.map(l => `${esc(l.sku)}：採購單 ${p.lines.find(x => x.sku === l.sku).qty} → 實際 ${l.qty}`).join('\n')}\n沒錯的話再按一次「確認送出」。</div>`;
+    const over = lines.filter(l => l.qty > remain(l.sku));
+    const sig = JSON.stringify(over);
+    if (over.length && $('fSubmit').dataset.ok !== sig){
+      $('fMsg').innerHTML = `<div class="msg warn">以下數量超過還沒做的數量：\n${over.map(l => `${esc(l.sku)}：還沒做 ${remain(l.sku)}，這批填 ${l.qty}`).join('\n')}\n沒錯的話再按一次「確認送出」。</div>`;
       $('fSubmit').dataset.ok = sig; $('fSubmit').textContent = '確認送出'; return;
     }
-    const cleanBoxes = Object.fromEntries(Object.entries(boxes).filter(([,v]) => num(v) > 0));
     $('fSubmit').disabled = true;
-    const rec = {date, lines, boxes: cleanBoxes, handling: t.handling, note: $('fNote').value.trim(),
-      by: user ? (user.displayName || user.email) : '試用', at: new Date().toISOString()};
-    const hist = p.status === 'done' && p.done ? [...(p.history||[]), p.done] : (p.history||[]);
     try {
-      await Store.save(p.po, {status:'done', done: rec, history: hist, sync: {sg:false, sheet:false}});
-      el.innerHTML = `<div class="card"><div class="msg ok">${esc(p.po)} 已回報完成 ✔\n完成日 ${esc(date)}，訂單處理費 ${t.handling} 件${Object.keys(t.cartons).length ? '，紙箱 ' + Object.entries(t.cartons).map(([k,v]) => k + ' ' + v).join('、') : ''}。\n紙本採購單照常交回給 Jay。</div>
-        <button class="btn" id="next">回報下一張</button></div>`;
+      await saveReps(newReps, force);
+      const pgN = progress(Object.assign({}, p, {reports: newReps}));
+      el.innerHTML = `<div class="card"><div class="msg ok">${esc(p.po)} 這批已回報 ✔（${esc(date)}）\n${r.status === 'done'
+        ? `整張全部做完，${esc(r.done.date)} 入帳。訂單處理費合計 ${r.done.handling} 件${Object.keys(boxTotals(r.done.boxes).cartons).length ? '，紙箱 ' + Object.entries(boxTotals(r.done.boxes).cartons).map(([k,v]) => k + ' ' + v).join('、') : ''}。\n紙本採購單照常交回給 Jay。`
+        : `目前進度 ${pgN.tRep}／${pgN.tOrd}，還沒全部做完，先不入帳。`}</div>
+        <button class="btn" id="next">回清單</button></div>`;
       $('next').onclick = renderList;
     } catch(e){ $('fSubmit').disabled = false; $('fMsg').innerHTML = `<div class="msg err">送出失敗：${esc(e.message)}\n請再按一次，或拍照給 Jay。</div>`; }
   };
@@ -387,7 +437,13 @@ function matData(toDate){
   const open = Store.list().filter(p => p.status !== 'done');
   for (const p of open){
     let used = false;
-    for (const s of srcOf(p)){
+    const pg = progress(p), left = {};
+    Object.keys(pg.ord).forEach(k => left[k] = Math.max(0, pg.ord[k] - (pg.rep[k]||0)));
+    for (const s0 of srcOf(p)){
+      // 已做好的盒數依序從同料號的生產單扣掉
+      const take = Math.min(num(s0.qty), left[s0.sku] ?? num(s0.qty)); if (left[s0.sku] != null) left[s0.sku] -= take;
+      if (!take) continue;
+      const s = Object.assign({}, s0, {qty: take, mat: s0.mat ? Object.fromEntries(Object.entries(s0.mat).map(([c,v]) => [c, num(v) * take / num(s0.qty)])) : s0.mat});
       if (toDate && s.earliest && s.earliest > toDate) continue;
       used = true; boxCnt += num(s.qty);
       const mt = matOf(s);
@@ -409,7 +465,7 @@ function matData(toDate){
 function renderMat(){
   const el = $('v-mat');
   el.innerHTML = `<div class="card"><h2>目前總需要用料（茶點、茶包）</h2>
-    <p class="mut" style="margin-top:0">只算還沒回報完成的採購單；回報完成後會自動扣掉。有下載生產單的用生產單實際用料（含客製改料），還沒有的先用 BOM 估算。</p>
+    <p class="mut" style="margin-top:0">只算還沒做的盒數；分批回報做好的會自動扣掉。有下載生產單的用生產單實際用料（含客製改料），還沒有的先用 BOM 估算。</p>
     <div class="row"><div><label class="mut">最早到貨日在這天以前（空白＝全部）</label><input type="date" id="mTo"></div>
     <div><label class="mut">顯示</label><select id="mGrp"><option value="all">全部</option><option value="餅乾">只看茶點（餅乾類）</option><option value="茶包">只看茶包</option></select></div></div>
     <div id="mRes"></div></div>`;
