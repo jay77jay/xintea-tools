@@ -109,7 +109,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-16-5';
+const APP_VERSION = 'v2026-11-16-6';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
@@ -275,7 +275,7 @@ function renderList(){
       <div class="sortbar"><span class="mut">排序：</span>${Object.entries(SORTS).map(([k,v]) => `<button data-s="${k}" class="${SORT===k?'on':''}">${v.label}</button>`).join('')}</div>
       <p class="mut" style="margin:8px 0 0">掃採購單上的 QR 碼會直接打開該單。紅框＝生產單有異動，橘邊＝客製化。</p>
       <div class="row" style="margin-top:10px">
-        <button class="btn ghost" id="jbNew" disabled title="下一階段推出">🔍 搜尋新訂單（準備中）</button>
+        <button class="btn ghost" id="jbNew" title="目前只預覽：列出新生產單和預計建立的 SG 採購單，不會建單或列印">🔍 搜尋新訂單（預覽）</button>
         <button class="btn ghost" id="jbSG">📦 掃描 SG 接收</button>
       </div>
       <div class="mut" id="wkState" style="margin-top:6px"></div>
@@ -296,6 +296,7 @@ function renderList(){
   };
   $('q').oninput = draw; draw();
   $('jbSG').onclick = () => startJob('scanSG');
+  $('jbNew').onclick = () => startJob('scanNew');
   workerState();
   if (JOB_ID) watchJob(JOB_ID);
 }
@@ -332,6 +333,10 @@ function watchJob(id){
         ${list('已在 SG 補接收', r.received, 'ok')}${list('已在 SG 鎖單（標記為已完成）', r.locked, 'ok')}
         ${list('SG 已接收比回報多（請同仁補回報）', r.sgMore, 'warn')}${list('回報比 SG 已接收多（SG 還沒接收）', r.reportMore, 'warn')}
         ${list('已全部寄出、待鎖單', r.canLock, 'warn')}${list('錯誤', r.errors, 'err')}` : ''}
+      ${j.type === 'scanNew' && j.status === 'done' ? `<div class="msg ok">預覽完成（還沒有建單、列印或回填）。</div>
+        ${list('預計建立的 SG 採購單', r.planned, 'ok')}${list('EIP 還查不到的生產單', r.eipMissing, 'warn')}
+        ${list('已列印但系統沒有（可能是同仁手動建的）', r.printedNotIn, 'warn')}${list('系統內生產單有異動', r.changed, 'warn')}
+        ${list('其他', r.skipped, 'warn')}${list('錯誤', r.errors, 'err')}` : ''}
       ${j.error ? `<div class="msg err">${esc(j.error)}</div>` : ''}
       <details ${j.status === 'done' ? '' : 'open'}><summary class="mut">執行紀錄</summary><pre style="white-space:pre-wrap;font-size:12px;margin:6px 0 0">${esc((j.log||[]).join('\n'))}</pre></details></div>`;
     $('jbClose').onclick = () => { if (JOB_UNSUB) JOB_UNSUB(); JOB_ID = null; el.innerHTML = ''; };
