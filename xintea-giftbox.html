@@ -1,0 +1,3876 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>心茶 出貨 禮盒製作每日增加數</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#F7F3EA;
+    --paper:#FFFDF8;
+    --ink:#2B2419;
+    --ink-soft:#6B6152;
+    --moss:#4A5D3A;
+    --moss-dark:#37452B;
+    --gold:#C9853B;
+    --gold-soft:#F0DFC0;
+    --green-pos:#5C7A45;
+    --green-pos-bg:#EAF0E2;
+    --rust-neg:#B5533A;
+    --rust-neg-bg:#F7E7E1;
+    --line:#E4DCC9;
+    --baseline-bg:#FBF0DA;
+    --info:#3E6B78;
+    --info-bg:#E6EEF0;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--cream);
+    color:var(--ink);
+    font-family:'Noto Sans TC',sans-serif;
+    padding:32px 20px 80px;
+  }
+  .wrap{max-width:1180px;margin:0 auto;}
+  header{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:16px;
+    margin-bottom:28px;
+    padding-bottom:20px;
+    border-bottom:2px solid var(--line);
+    flex-wrap:wrap;
+  }
+  .title-block .eyebrow{
+    font-size:12px;
+    letter-spacing:0.14em;
+    color:var(--gold);
+    font-weight:700;
+    margin-bottom:6px;
+  }
+  h1{
+    font-family:'Noto Serif TC',serif;
+    font-weight:700;
+    font-size:28px;
+    margin:0;
+    color:var(--moss-dark);
+  }
+  .subtitle{color:var(--ink-soft);font-size:13.5px;margin-top:6px;}
+  .version-tag{color:var(--ink-soft);font-size:11px;margin-top:10px;opacity:0.7;letter-spacing:.02em;}
+  .card{
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:22px 24px;
+    margin-bottom:20px;
+    box-shadow:0 1px 2px rgba(43,36,25,0.04);
+  }
+  .card h2{
+    font-family:'Noto Serif TC',serif;
+    font-size:16px;
+    margin:0 0 14px;
+    color:var(--moss-dark);
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .card h2 .num{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:22px;height:22px;
+    border-radius:50%;
+    background:var(--moss);
+    color:#fff;
+    font-size:12px;
+    font-weight:700;
+  }
+  .upload-row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;}
+  .field label{
+    display:block;
+    font-size:12.5px;
+    color:var(--ink-soft);
+    margin-bottom:6px;
+    font-weight:500;
+  }
+  input[type="date"], input[type="text"]{
+    border:1px solid var(--line);
+    background:#fff;
+    border-radius:8px;
+    padding:9px 12px;
+    font-size:14px;
+    color:var(--ink);
+    font-family:inherit;
+  }
+  .file-drop{
+    border:1.5px dashed var(--line);
+    border-radius:10px;
+    padding:14px 18px;
+    background:#FCFAF3;
+    cursor:pointer;
+    font-size:13.5px;
+    color:var(--ink-soft);
+    min-width:260px;
+    flex:1;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    transition:border-color .15s, background .15s;
+  }
+  .file-drop:hover, .file-drop.drag{border-color:var(--gold);background:#FBF3E4;}
+  .file-drop svg{flex-shrink:0;}
+  .file-drop .fname{color:var(--ink);font-weight:500;}
+  button{
+    font-family:inherit;
+    cursor:pointer;
+    border:none;
+    border-radius:8px;
+    font-weight:700;
+    font-size:14px;
+    padding:10px 20px;
+    transition:opacity .15s, transform .1s;
+  }
+  button:active{transform:scale(0.98);}
+  .btn-primary{background:var(--moss);color:#fff;}
+  .btn-primary:hover{opacity:0.9;}
+  .btn-primary:disabled{background:#B9C2AE;cursor:not-allowed;}
+  .btn-ghost{background:transparent;color:var(--ink-soft);border:1px solid var(--line);font-weight:500;padding:8px 14px;font-size:13px;}
+  .btn-ghost:hover{border-color:var(--ink-soft);color:var(--ink);}
+  .btn-danger-ghost{background:transparent;color:var(--rust-neg);border:1px solid var(--rust-neg-bg);font-weight:500;padding:6px 12px;font-size:12.5px;}
+  .btn-danger-ghost:hover{background:var(--rust-neg-bg);}
+  .btn-gold-ghost{background:transparent;color:var(--gold);border:1px solid var(--gold-soft);font-weight:700;padding:6px 12px;font-size:12.5px;}
+  .btn-gold-ghost:hover{background:var(--gold-soft);}
+  .msg{font-size:13px;margin-top:10px;padding:9px 12px;border-radius:8px;display:none;}
+  .msg.show{display:block;}
+  .msg.ok{background:var(--green-pos-bg);color:var(--green-pos);}
+  .msg.err{background:var(--rust-neg-bg);color:var(--rust-neg);}
+  .msg.warn{background:var(--baseline-bg);color:var(--gold);white-space:pre-line;}
+
+  .snap-list{display:flex;flex-wrap:wrap;gap:10px;}
+  .snap-pill{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    background:#FCFAF3;
+    border:1px solid var(--line);
+    border-radius:999px;
+    padding:6px 8px 6px 14px;
+    font-size:13px;
+  }
+  .snap-pill.baseline{background:var(--baseline-bg);border-color:var(--gold-soft);}
+  .snap-pill .d{font-weight:700;color:var(--ink);}
+  .snap-pill .c{color:var(--ink-soft);font-size:12px;}
+  .snap-pill .tag{
+    font-size:10.5px;font-weight:700;color:#fff;background:var(--gold);
+    padding:2px 7px;border-radius:999px;letter-spacing:.03em;
+  }
+  .snap-pill button{padding:3px 9px;font-size:11.5px;border-radius:999px;}
+
+  .snap-list-toggle-row{text-align:center;margin-top:10px;}
+  .snap-count{font-size:12px;font-weight:400;color:var(--ink-soft);margin-left:6px;}
+  .snap-collapsed-hint{
+    width:100%;text-align:center;font-size:12px;color:var(--ink-soft);
+    padding:4px 0 2px;letter-spacing:.02em;
+  }
+
+  .empty-state{
+    text-align:center;color:var(--ink-soft);font-size:13.5px;padding:30px 10px;
+  }
+
+  .summary-grid{display:flex;gap:16px;flex-wrap:wrap;}
+  .stat{
+    flex:1;min-width:160px;
+    background:#FCFAF3;
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:16px 18px;
+  }
+  .stat .label{font-size:12px;color:var(--ink-soft);margin-bottom:6px;}
+  .stat .value{font-family:'Noto Serif TC',serif;font-size:26px;font-weight:700;color:var(--moss-dark);}
+  .stat .value.pos{color:var(--green-pos);}
+  .stat .value.neg{color:var(--rust-neg);}
+  .stat .sub{font-size:11.5px;color:var(--ink-soft);margin-top:4px;}
+
+  .table-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:10px;}
+  table{border-collapse:collapse;width:100%;font-size:13px;min-width:640px;}
+  table.warehouse-table{width:auto;min-width:0;}
+  table.warehouse-table th, table.warehouse-table td{white-space:nowrap;}
+  table.warehouse-table td.pname{max-width:320px;white-space:normal;}
+  table.warehouse-table th.num, table.warehouse-table td.num{width:76px;}
+  thead th{
+    background:var(--moss-dark);
+    color:#fff;
+    text-align:left;
+    padding:10px 12px;
+    font-weight:500;
+    white-space:nowrap;
+    position:sticky;top:0;
+  }
+  thead th.num{text-align:right;}
+  tbody td{
+    padding:9px 12px;
+    border-bottom:1px solid var(--line);
+    white-space:nowrap;
+  }
+  tbody td.num{text-align:right;font-variant-numeric:tabular-nums;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:#FBF8EF;}
+  tbody tr.total-row td{
+    font-weight:700;background:var(--baseline-bg);border-top:2px solid var(--gold-soft);
+  }
+  .sku{color:var(--ink-soft);font-size:11.5px;}
+  .pname{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .warehouse-group{margin-bottom:22px;}
+  .warehouse-group:last-child{margin-bottom:0;}
+  .warehouse-group-title{
+    display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+    font-weight:700;font-size:15px;color:var(--ink);
+    padding-bottom:8px;margin-bottom:10px;border-bottom:2px solid var(--moss);
+  }
+  .warehouse-group-total{font-size:13px;font-weight:700;color:var(--moss);white-space:nowrap;}
+  .warehouse-recv-pill{
+    display:inline-flex;align-items:center;gap:6px;
+    background:var(--baseline-bg);border:1px solid var(--gold-soft);border-radius:999px;
+    padding:5px 12px;font-size:12.5px;color:var(--ink);
+  }
+  .warehouse-recv-pill-x{
+    border:none;background:none;color:var(--rust-neg);cursor:pointer;font-size:12px;padding:0 2px;line-height:1;
+  }
+  .delta.pos{color:var(--green-pos);font-weight:700;}
+  .delta.neg{color:var(--rust-neg);font-weight:700;}
+  .delta.zero{color:var(--ink-soft);}
+  .baseline-col{background:var(--baseline-bg);}
+
+  /* 採購單彙整：直式A4列印版面，平常隱藏，只有按「列印」時透過瀏覽器的列印功能顯示。
+     單欄呈現，一行一筆「SKU＋採購單編號」，行數多的話會自然分頁，不硬塞在一頁裡。 */
+  .po-print-sheet{display:none;}
+  .po-print-title{text-align:center;font-size:17px;font-weight:700;margin-bottom:3px;}
+  .po-print-meta{text-align:center;font-size:11px;color:var(--ink-soft);margin-bottom:12px;}
+  .po-print-table{border-collapse:collapse;width:100%;}
+  .po-print-table th, .po-print-table td{border:1px solid #000;padding:5px 8px;font-size:12.5px;line-height:1.3;}
+  .po-print-table th{background:#eee;text-align:left;}
+  .po-print-table thead{display:table-header-group;} /* 分頁時每一頁都重複表頭 */
+  .po-print-table tr{page-break-inside:avoid;} /* 同一個SKU（含底下堆疊的採購單編號）不要被硬切到下一頁 */
+  .po-print-table td.po-sku{font-weight:700;width:12%;vertical-align:middle;}
+  .po-print-table td.po-name{width:32%;vertical-align:middle;font-size:11.5px;}
+  .po-print-table td.po-poNo{width:20%;padding:0;vertical-align:middle;}
+  .po-print-table td.po-poNo .po-line{padding:5px 8px;border-bottom:1px solid #000;}
+  .po-print-table td.po-poNo .po-line:last-child{border-bottom:none;}
+  .po-print-table td.po-qty{font-weight:700;text-align:center;width:14%;vertical-align:middle;}
+  .po-print-table td.po-fill{width:22%;vertical-align:middle;}
+  .po-print-table tr.po-grandtotal-row td{background:#000;color:#fff;font-weight:700;font-size:13.5px;}
+  .po-summary-row:hover{background:var(--cream);}
+  .po-summary-caret{color:var(--ink-soft);text-align:center;font-size:11px;}
+  @media print{
+    .wrap{ display:none !important; } /* 真正把版面上其他所有內容移除，不佔任何空間，不會再有列印前面空白頁的問題 */
+    .po-print-sheet{
+      display:block !important;
+    }
+    @page{ size:A4 landscape; margin:14mm; }
+  }
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
+  .toolbar .hint{font-size:12.5px;color:var(--ink-soft);}
+  .loading{color:var(--ink-soft);font-size:13px;padding:20px;text-align:center;}
+
+  #hero-card{
+    background:linear-gradient(135deg, var(--moss-dark), var(--moss));
+    border:none;
+    text-align:center;
+    padding:32px 24px;
+  }
+  .hero-label{color:#DCE6D2;font-size:14px;font-weight:500;margin-bottom:8px;}
+  .hero-number{
+    font-family:'Noto Serif TC',serif;
+    font-size:64px;
+    font-weight:700;
+    color:#fff;
+    line-height:1.1;
+  }
+  .hero-number.neg{color:#F5C9BA;}
+  .hero-sub{color:#DCE6D2;font-size:13px;margin-top:10px;}
+  .hero-empty{color:#DCE6D2;font-size:14px;padding:10px;}
+  .hero-warn{
+    margin-top:14px;
+    background:rgba(255,255,255,0.12);
+    border-radius:8px;
+    padding:10px 14px;
+    color:#FBE8D8;
+    font-size:12.5px;
+    display:inline-block;
+  }
+  .hero-sub-stat{
+    margin-top:22px;
+    padding-top:18px;
+    border-top:1px solid rgba(255,255,255,0.25);
+    display:inline-block;
+  }
+  .hero-sub-label{color:#DCE6D2;font-size:12.5px;margin-bottom:6px;}
+  .hero-sub-number{
+    font-family:'Noto Serif TC',serif;
+    font-size:32px;
+    font-weight:700;
+    color:#fff;
+  }
+  .neg-alert{
+    background:#fff;
+    border:3px solid var(--rust-neg);
+    border-radius:12px;
+    padding:16px 20px;
+    margin-bottom:24px;
+    text-align:left;
+  }
+  .neg-alert-title{
+    color:var(--rust-neg);
+    font-weight:700;
+    font-size:15px;
+    margin-bottom:10px;
+  }
+  .neg-alert-row{
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    padding:6px 0;
+    border-top:1px solid var(--rust-neg-bg);
+  }
+  .neg-alert-row:first-of-type{border-top:none;}
+  .neg-alert-stock-form{
+    display:flex;align-items:center;gap:6px;
+    font-size:11.5px;color:var(--ink-soft);
+    margin-left:auto;padding-left:12px;
+  }
+  .hold-alert{
+    background:#fff;
+    border:3px solid var(--gold);
+    border-radius:12px;
+    padding:16px 20px;
+    margin-bottom:24px;
+    text-align:left;
+  }
+  .hold-alert-title{
+    color:var(--gold);
+    font-weight:700;
+    font-size:15px;
+    margin-bottom:10px;
+  }
+  .hold-alert-row{
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    padding:6px 0;
+    border-top:1px solid var(--gold-soft);
+  }
+  .hold-alert-row:first-of-type{border-top:none;}
+  .hold-alert-sku{font-family:'Noto Serif TC',serif;font-weight:700;font-size:22px;color:var(--ink);}
+  .hold-alert-name{font-size:14px;color:var(--ink-soft);flex:1;}
+  .hold-alert-qty{font-family:'Noto Serif TC',serif;font-weight:700;font-size:22px;color:var(--gold);}
+  .neg-alert-stock-form input{
+    width:50px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-family:inherit;font-size:12px;text-align:right;
+  }
+  .neg-alert-stock-form button{padding:3px 10px;font-size:11.5px;}
+  .neg-alert-sku{font-family:'Noto Serif TC',serif;font-weight:700;font-size:22px;color:var(--ink);}
+  .neg-alert-name{font-size:14px;color:var(--ink-soft);flex:1;}
+  .neg-alert-qty{font-family:'Noto Serif TC',serif;font-weight:700;font-size:22px;color:var(--rust-neg);}
+
+  .change-alert{
+    background:#fff;
+    border:3px solid var(--info);
+    border-radius:12px;
+    padding:16px 20px;
+    margin-bottom:24px;
+    text-align:left;
+  }
+  .change-alert-pointer{
+    background:var(--info-bg);
+    border:1px solid var(--info);
+    color:var(--info);
+    border-radius:10px;
+    padding:12px 16px;
+    margin-bottom:20px;
+    font-size:13.5px;
+    font-weight:700;
+    cursor:pointer;
+    transition:opacity .15s;
+  }
+  .change-alert-pointer:hover{opacity:0.8;}
+  .change-alert-title{
+    color:var(--info);
+    font-weight:700;
+    font-size:15px;
+    margin-bottom:10px;
+  }
+  .change-alert-row{
+    padding:10px 0;
+    border-top:1px solid var(--info-bg);
+  }
+  .change-alert-row:first-of-type{border-top:none;}
+  .change-alert-head{
+    display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px;
+  }
+  .change-alert-order{font-family:'Noto Serif TC',serif;font-weight:700;font-size:17px;color:var(--ink);}
+  .change-alert-meta{font-size:11.5px;color:var(--ink-soft);}
+  .change-alert-diff{font-size:13px;color:var(--ink);line-height:1.6;}
+  .change-alert-diff .sku{font-weight:700;}
+  .change-alert-ack-row{margin-top:6px;}
+
+  .order-change-list-row{
+    background:var(--info-bg);
+    border-radius:10px;
+    padding:12px 16px;
+    margin-bottom:10px;
+  }
+
+  .modal-overlay{
+    position:fixed;inset:0;
+    background:rgba(43,36,25,0.45);
+    display:flex;align-items:center;justify-content:center;
+    z-index:1000;
+    padding:20px;
+  }
+  .modal-box{
+    background:var(--paper);
+    border-radius:14px;
+    padding:26px 28px;
+    max-width:420px;
+    width:100%;
+    box-shadow:0 8px 30px rgba(0,0,0,0.2);
+  }
+  .modal-title{
+    font-family:'Noto Serif TC',serif;
+    font-weight:700;
+    font-size:17px;
+    color:var(--moss-dark);
+    margin-bottom:10px;
+  }
+  .modal-msg{font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:20px;white-space:pre-line;}
+  .modal-actions{display:flex;flex-direction:column;gap:8px;}
+  .modal-actions button{width:100%;padding:11px;font-size:14px;}
+  .sys-bar{border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:13.5px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .sys-bar.info{background:var(--info-bg);color:var(--info);border:1px solid var(--info);}
+  .sys-bar.err{background:var(--rust-neg-bg);color:var(--rust-neg);border:2px solid var(--rust-neg);font-weight:700;}
+  .sys-bar.demo{background:var(--baseline-bg);color:var(--gold);border:1px solid var(--gold-soft);}
+  .who{font-size:12px;color:var(--ink-soft);}
+  body.locked .wrap > .card{display:none;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="title-block">
+      <div class="eyebrow">心茶 · 出貨</div>
+      <h1>禮盒製作每日增加數</h1>
+      <div class="subtitle">逐日上傳「廠商訂單確認」總表，自動排除已刪除/結案訂單與均茂免製作品項，依料號計算每日應增加製作的禮盒數</div>
+      <div class="version-tag" id="version-tag"></div>
+    </div>
+    <div class="who" id="who"></div>
+  </header>
+  <div class="sys-bar demo" id="demo-bar" style="display:none;">試用模式：不是從正式網址開啟，資料只存在這台電腦的瀏覽器裡。正式版請開 https://jay77jay.github.io/xintea-tools/xintea-giftbox.html</div>
+  <div class="sys-bar info" id="login-bar" style="display:none;">請先用公司 Google 帳號登入，資料存在雲端資料庫，多台電腦看到的是同一份。<button class="btn-primary" id="login-btn">Google 登入</button></div>
+  <div class="sys-bar info" id="load-bar" style="display:none;"></div>
+  <div class="sys-bar err" id="err-bar" style="display:none;"></div>
+
+  <div class="card">
+    <h2><span class="num">1</span>上傳今日訂單</h2>
+    <div class="upload-row">
+      <div class="field">
+        <label for="snap-date">抓貨日期（用來計算製作許可日上限）</label>
+        <input type="date" id="snap-date">
+      </div>
+      <div class="field">
+        <label for="snap-label">時段標籤（同一天抓兩次時填，例如「上午」）</label>
+        <input type="text" id="snap-label" placeholder="可留空" style="width:130px;">
+      </div>
+      <div class="field">
+        <label for="window-days">抓未來幾天內的訂單（含）</label>
+        <input type="text" id="window-days" value="10" style="width:70px;" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label>製作許可日上限（自動計算）</label>
+        <input type="date" id="ship-to" disabled style="background:#F2EFE5;color:var(--ink-soft);">
+      </div>
+      <div class="field" style="flex:1;min-width:260px;">
+        <label>訂單檔案（.xlsx）</label>
+        <div class="file-drop" id="drop-zone">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C9853B" stroke-width="2"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>
+          <span id="drop-label">點擊選擇或拖曳檔案到此</span>
+        </div>
+        <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none;">
+      </div>
+      <button class="btn-primary" id="upload-btn" disabled>上傳並比對</button>
+    </div>
+    <div class="msg" id="upload-msg"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="num">2</span>已上傳的每日快照<span class="snap-count" id="snap-count"></span></h2>
+    <div id="snap-list" class="snap-list">
+      <div class="empty-state">尚未上傳任何訂單檔案，請先在上方上傳第一天的訂單並設為基準日。</div>
+    </div>
+    <div id="snap-list-toggle-row" class="snap-list-toggle-row" style="display:none;">
+      <button class="btn-gold-ghost" id="snap-list-toggle-btn" onclick="toggleSnapListExpand()"></button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="num">3</span>資料備份與還原</h2>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
+      <div class="field">
+        <label>把目前所有紀錄存成一個檔案</label>
+        <button class="btn-ghost" id="backup-btn">下載備份檔（.json）</button>
+      </div>
+      <div class="field">
+        <label for="restore-input">讀回備份檔（會覆蓋目前資料）</label>
+        <input type="file" id="restore-input" accept=".json">
+      </div>
+    </div>
+    <div class="msg" id="backup-msg"></div>
+    <div style="font-size:12px;color:var(--ink-soft);margin-top:10px;">資料存在雲端資料庫，換電腦或重新整理都不會不見。仍建議每週下載一次備份檔存到 Dropbox，萬一資料庫出問題還能還原。</div>
+  </div>
+
+  <div class="card" id="hero-card" style="display:none;">
+    <div id="hero-content"></div>
+  </div>
+
+  <div class="card" id="production-card" style="display:none;">
+    <div class="toolbar">
+      <h2 style="margin:0;"><span class="num">4</span>訂單查詢與庫存調整</h2>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button class="btn-ghost" id="toggle-production-btn">顯示訂單查詢</button>
+      </div>
+    </div>
+    <div id="production-body-wrap" style="display:none;">
+      <div class="hint" style="margin-bottom:12px;">輸入訂單編號（電商平台訂單單號），查出這張訂單目前包含的禮盒品項。如果訂單整張取消、但已經做了一部分，可以填「已準備」數量後按「整筆刪除」，會自動登記為剩餘庫存，之後同品項有新需求時會先扣抵這批庫存。</div>
+
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+        <input type="text" id="order-search-input" placeholder="輸入訂單編號，例如 20260723001821749" style="flex:1;min-width:220px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:14px;">
+        <button class="btn-primary" id="order-search-btn">查詢</button>
+      </div>
+
+      <div id="order-search-result"></div>
+
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line);">
+        <label style="display:block;font-size:12.5px;color:var(--ink-soft);margin-bottom:6px;">快速登記剩餘庫存（不透過訂單查詢，直接輸入商品編號＋數量）</label>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <input type="text" id="manual-excess-sku" placeholder="商品編號，例如 AA00274" style="width:160px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:13px;">
+          <input type="text" id="manual-excess-qty" placeholder="數量" inputmode="numeric" style="width:90px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:13px;">
+          <button class="btn-gold-ghost" id="manual-excess-btn">登記為剩餘庫存</button>
+        </div>
+        <div style="margin-top:14px;">
+          <label style="font-size:12px;display:block;margin-bottom:6px;">一次登記多筆（一行一筆：商品編號＋空白或Tab＋數量，可以直接從Excel複製兩欄貼上）</label>
+          <textarea id="manual-excess-bulk" rows="4" style="width:100%;max-width:420px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:13px;resize:vertical;" placeholder="AA00334	120&#10;AA00301	65&#10;AA00312	11"></textarea>
+          <div style="margin-top:8px;">
+            <button class="btn-gold-ghost" id="manual-excess-bulk-btn">批次登記為剩餘庫存</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--ink-soft);margin-top:8px;margin-bottom:6px;">目前登記的剩餘庫存（下次增加時會自動先扣抵）：</div>
+        <div id="excess-stock-list" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+      </div>
+
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line);">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <label style="font-size:12.5px;color:var(--ink-soft);">庫存登記紀錄（每次登記剩餘庫存的時間點與來源）</label>
+          <button class="btn-ghost" id="toggle-recorded-log-btn" style="padding:5px 12px;font-size:12px;">顯示登記紀錄</button>
+        </div>
+        <div id="recorded-log-wrap" style="display:none;margin-top:10px;">
+          <div class="table-scroll">
+            <table id="recorded-log-table"></table>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line);">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <label style="font-size:12.5px;color:var(--ink-soft);">忽略紀錄（減少警示被忽略時記錄的原因）</label>
+          <button class="btn-ghost" id="toggle-ignored-log-btn" style="padding:5px 12px;font-size:12px;">顯示忽略紀錄</button>
+        </div>
+        <div id="ignored-log-wrap" style="display:none;margin-top:10px;">
+          <div class="table-scroll">
+            <table id="ignored-log-table"></table>
+          </div>
+        </div>
+      </div>
+      <div class="msg" id="production-msg" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <h2 style="margin:0;"><span class="num">5</span>訂單內容異動記錄<span class="snap-count" id="order-change-count"></span></h2>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button class="btn-ghost" id="toggle-order-change-btn">顯示訂單內容異動記錄</button>
+      </div>
+    </div>
+    <div id="order-change-body-wrap" style="display:none;">
+      <div class="hint" style="margin-bottom:12px;">
+        追蹤同一張訂單「內容跟上一次不一樣」的情況（廠商事後改了品項或數量，但沒有另外通知）。只要還沒按「知道了」，都會持續列在這裡，不會因為換了下一組比較就消失。
+      </div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--line);">
+        <div class="field">
+          <label style="font-size:12px;">出廠日期（起）</label>
+          <input type="date" id="order-change-filter-date-from" style="padding:6px 10px;">
+        </div>
+        <div class="field">
+          <label style="font-size:12px;">出廠日期（迄）</label>
+          <input type="date" id="order-change-filter-date-to" style="padding:6px 10px;">
+        </div>
+        <div class="field">
+          <label style="font-size:12px;">訂單編號關鍵字</label>
+          <input type="text" id="order-change-filter-orderno" placeholder="可只打數字" style="padding:6px 10px;width:160px;">
+        </div>
+        <button class="btn-ghost" id="order-change-filter-clear-btn" style="padding:7px 14px;font-size:12.5px;">清除篩選</button>
+      </div>
+      <div id="order-change-list"></div>
+    </div>
+  </div>
+
+  <div class="card" id="summary-card" style="display:none;">
+    <h2><span class="num">6</span>今日製作彙總（詳細）</h2>
+    <div class="summary-grid" id="summary-grid"></div>
+  </div>
+
+  <div class="card" id="table-card" style="display:none;">
+    <div class="toolbar">
+      <h2 style="margin:0;"><span class="num">7</span>各品項每日累積數量與增加數</h2>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button class="btn-ghost" id="toggle-table-btn">顯示詳細品項對照表</button>
+      </div>
+    </div>
+    <div id="table-body-wrap" style="display:none;">
+      <div class="toolbar">
+        <span class="hint" id="table-hint"></span>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <button class="btn-ghost" id="toggle-compact-btn">顯示完整每日記錄</button>
+          <button class="btn-ghost" id="export-btn">匯出 CSV（完整對照表）</button>
+          <button class="btn-primary" id="export-sg-btn">匯出 SG採購單</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table id="data-table"></table>
+      </div>
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line);">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <label style="font-size:12.5px;color:var(--ink-soft);">採購單匯出紀錄（每次真正匯出的時間點，避免重複匯出重複扣庫存）</label>
+          <button class="btn-ghost" id="toggle-export-log-btn" style="padding:5px 12px;font-size:12px;">顯示匯出紀錄</button>
+        </div>
+        <div id="export-log-wrap" style="display:none;margin-top:10px;">
+          <div class="table-scroll">
+            <table id="export-log-table"></table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <h2 style="margin:0;"><span class="num">8</span>全品項健康檢查</h2>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button class="btn-ghost" id="toggle-healthcheck-btn">顯示健康檢查</button>
+      </div>
+    </div>
+    <div id="healthcheck-body-wrap" style="display:none;">
+      <div class="hint" style="margin-bottom:12px;">
+        原理：把「基準日到現在累計淨增加」跟「所有已經匯出過的採購單加總」互相對照，兩者理論上應該一致。如果對不上，代表中間某次的增加沒有被實際匯出成採購單（不管是漏匯出、還是比對縫隙造成的），會直接抓出來，不用再回頭猜歷史發生了什麼。
+        <br><br>
+        <strong>建議做法：</strong>把每次匯出的 SG採購單都存到「同一個資料夾」，之後每次要健康檢查，就打開這個資料夾、全選裡面所有檔案上傳比對。這樣才能真實反映目前的狀態，不用另外記什麼有沒有處理過。
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:12.5px;color:var(--ink-soft);margin-bottom:6px;">選擇所有已經匯出過的 SG採購單檔案（可一次選很多個，越完整檢查越準）</label>
+        <input type="file" id="healthcheck-input" accept=".xlsx,.xls" multiple>
+      </div>
+      <button class="btn-primary" id="healthcheck-run-btn">開始比對</button>
+      <div id="healthcheck-result" style="margin-top:16px;"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <h2 style="margin:0;"><span class="num">9</span>均茂備貨清單（依到貨區間）</h2>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button class="btn-ghost" id="toggle-warehouse-btn">顯示均茂備貨清單</button>
+      </div>
+    </div>
+    <div id="warehouse-body-wrap" style="display:none;">
+      <div class="hint" style="margin-bottom:14px;">
+        均茂負責的品項是現貨、只需要包裝，不用你這邊排產——這裡純粹是幫忙彙整「每個到貨區間，均茂總共需要準備多少」，方便通知對方備貨，跟前面的禮盒製作排程完全獨立。「應到貨」看的是最新一次上傳的當下總量，訂單有新增或取消會直接反映。均茂的明細是這次才開始保留，這次之前上傳的舊快照沒有資料可以顯示。
+      </div>
+      <div class="hint" style="margin-bottom:14px;background:var(--info-bg);border:1px solid var(--info);border-radius:8px;padding:10px 14px;color:var(--ink);">
+        <strong style="color:var(--info);">到貨怎麼扣抵：</strong>均茂送貨不是精準對應到某一個區間，所以登記到貨時不分區間，一律先扣「時間最早、還沒扣完的那個區間」，扣滿了才輪到下一個區間。例如這週需要5個、送來8個，會先扣掉這週的5個，剩下3個自動留給下一個區間，不會被當成「這週多送3個」。
+      </div>
+      <div style="margin-bottom:12px;padding-bottom:16px;border-bottom:1px solid var(--line);">
+        <label style="font-size:12px;display:block;margin-bottom:6px;">登記均茂到貨（一次可以貼多行，一行一筆：商品編號＋空白或Tab＋數量，可以直接從Excel複製兩欄貼上；登記錯了輸入負數更正即可）</label>
+        <textarea id="warehouse-recv-bulk" rows="4" style="width:100%;max-width:520px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:13px;resize:vertical;" placeholder="AA00301	8&#10;AA00299	12&#10;AA00308	20"></textarea>
+        <div style="margin-top:10px;">
+          <button class="btn-primary" id="warehouse-recv-submit-btn">批次登記</button>
+        </div>
+        <div class="msg" id="warehouse-recv-msg"></div>
+      </div>
+      <div id="warehouse-received-summary" style="margin-bottom:20px;display:flex;flex-wrap:wrap;gap:8px;"></div>
+      <div class="toolbar" style="flex-wrap:wrap;gap:12px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--line);">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+          <input type="text" id="warehouse-filter-keyword" placeholder="搜尋料號或品名" style="padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:13px;width:180px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink);cursor:pointer;">
+            <input type="checkbox" id="warehouse-filter-shortage-only" style="width:15px;height:15px;">
+            只顯示還缺的品項
+          </label>
+        </div>
+        <button class="btn-ghost" id="warehouse-export-btn">匯出 CSV</button>
+      </div>
+      <div id="warehouse-list"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <h2 style="margin:0;"><span class="num">10</span>採購單彙整（供應給製作組）</h2>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button class="btn-ghost" id="toggle-po-summary-btn">顯示採購單彙整</button>
+      </div>
+    </div>
+    <div id="po-summary-body-wrap" style="display:none;">
+      <div class="hint" style="margin-bottom:14px;">
+        上傳「還沒完成的採購單」整批匯出檔（每張採購單一個區塊，散落在同一份檔案裡），這裡會自動依「庫存SKU」加總每個品項還缺多少（數量－已收貨），彙整成一張表，方便直接印出來給製作組核對、填寫完成數量，不用再一張一張採購單去對。
+      </div>
+      <div class="upload-row" style="margin-bottom:16px;">
+        <div class="field" style="flex:1;">
+          <label for="po-summary-file">還沒完成的採購單彙出檔（.xlsx）</label>
+          <input type="file" id="po-summary-file" accept=".xlsx,.xls">
+        </div>
+        <button class="btn-primary" id="po-summary-parse-btn" disabled>彙整</button>
+      </div>
+      <div class="msg" id="po-summary-msg"></div>
+      <div id="po-summary-result"></div>
+    </div>
+  </div>
+
+  <div id="modal-overlay" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-title" id="modal-title">同一天已經有上傳紀錄</div>
+      <div class="modal-msg" id="modal-msg"></div>
+      <div class="modal-actions">
+        <button class="btn-primary" id="modal-overwrite">覆蓋這筆</button>
+        <button class="btn-gold-ghost" id="modal-add">新增為另一筆</button>
+        <button class="btn-ghost" id="modal-cancel">取消上傳</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="reason-modal-overlay" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-title">忽略原因</div>
+      <div class="modal-msg" id="reason-modal-msg"></div>
+      <select id="reason-modal-select" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:14px;margin-bottom:16px;">
+        <option value="取消訂單（沒有庫存）">取消訂單（本來就沒有庫存）</option>
+        <option value="訂單拆單重拋（同基礎訂單號有姊妹訂單，已出貨或已結案）">訂單拆單重拋（同基礎訂單號有姊妹訂單，已出貨或已結案）</option>
+        <option value="做了但拆掉了（料轉用）">做了但拆掉了（料轉做其他用途）</option>
+        <option value="異動移出視窗範圍（訂單還在，之後可能自己再出現）">異動移出視窗範圍（訂單還在，只是被改到抓天數之外，之後可能自己再出現）</option>
+        <option value="其他/不確定">其他／不確定</option>
+      </select>
+      <div class="modal-actions">
+        <button class="btn-primary" id="reason-modal-confirm">確定忽略</button>
+        <button class="btn-ghost" id="reason-modal-cancel">先不忽略，我再想想</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- 列印用版面：故意放在 .wrap 外面（跟它同層、不是巢狀在裡面）——如果放在 .wrap 裡面，
+     列印時就算把其他內容都設成看不見，瀏覽器還是會照著版面上原本的高度排版分頁，
+     等於要先「翻過」一大疊空白頁才會排到真正的內容。放在外面，搭配下面 @media print 直接把
+     .wrap 整個 display:none（真正從版面移除，不佔位置），這個區塊就不會受前面內容影響。 -->
+<div class="po-print-sheet" id="po-print-sheet">
+  <div class="po-print-title">採購單彙整清單</div>
+  <div class="po-print-meta" id="po-print-meta"></div>
+  <table class="po-print-table">
+    <thead><tr><th style="width:12%;">商品SKU</th><th style="width:32%;">品名</th><th style="width:20%;">採購單編號</th><th style="width:14%;">應完成數量</th><th>實際完成數量</th></tr></thead>
+    <tbody id="po-print-tbody"></tbody>
+  </table>
+</div>
+
+<script>
+// ============================================================
+// 版本紀錄（每次有邏輯或功能異動，記得在這裡加一行＋更新 APP_VERSION）
+// v1.18.0（2026-11-16）：改放 GitHub Pages（jay77jay.github.io/xintea-tools/xintea-giftbox.html），資料存 Firestore
+//                        （xintea_giftbox、xintea_giftbox_snaps），需 Google 登入；快照明細切塊存放。讀取失敗時鎖住畫面並顯示紅色提示，
+//                        不會把「讀不到」當成「沒有資料」。從其他地方開啟（例如本機檔案）＝試用模式，資料存瀏覽器
+// v1.17.3（2026-11-16）：Artifact 版（v1.18～v1.29）遺失，從 0922 本機版接回。名稱改為「心茶 出貨 禮盒製作每日增加數」；
+//                        匯出檔名改為「年-月-日心茶B2C增製作禮盒-SG採購單.xlsx」
+// v1.17.2（2026-09-21）：★補上v1.17.1漏掉的另一個路徑——上傳檔案時，如果選了「同一天＋同一個標籤」
+//                        並選擇「覆蓋這筆」，舊資料會被直接取代，跟刪除快照有一樣的風險，但完全不需要
+//                        點過「刪除」按鈕。使用者反映他確實沒有手動刪除任何快照，查證後發現這條路徑
+//                        才是更貼近真實情況的成因。現在上傳時如果偵測到「同一天同標籤」的舊快照曾經
+//                        被拿去匯出過採購單，會在覆蓋/新增的選擇視窗裡先顯示警告，選擇「覆蓋」時還會
+//                        再跳一次確認，避免在不知情的狀況下蓋掉已經當過比對基準的資料
+// v1.17.1（2026-09-21）：★重大修正——刪除快照時新增防呆，避免刪掉「已經被拿去匯出過SG採購單」的
+//                        基準點，造成同一批增加被重複請購。真實發生過的案例：2026-09-18下午的快照
+//                        被刪除後，2026-09-21匯出時找不到這個基準點，退回去跟更早的2026-09-18上午
+//                        比較，把9/18下午那次已經開過採購單請購過的60個，在9/21又重新算成新的增加、
+//                        重複請購了一次——問題根源不是計算邏輯錯，是刪除快照時失去了比對基準點。
+//                        現在刪除快照前，會先檢查這筆快照有沒有出現在「採購單匯出紀錄」（exportedPairs）
+//                        裡的任一側，如果有，會跳出明確警告列出當時匯出的內容，需要使用者確認後才會
+//                        繼續刪除，避免重蹈覆轍
+// v1.17.0（2026-09-10）：採購單彙整新增「品名」欄位，同事反映只有SKU不夠直覺。中文品名通常比較長，
+//                        改成A4橫印（原本是直印），欄位順序：商品SKU／品名／採購單編號／應完成數量／
+//                        實際完成數量。畫面上的彙整表格、展開明細，以及列印/PDF版面都同步加上品名
+// v1.16.2（2026-09-10）：★修正採購單彙整列印前面出現一堆空白頁——根本原因是列印用的區塊
+//                        （.po-print-sheet）原本巢狀放在整個頁面的 .wrap 容器裡面，列印時就算把其他
+//                        內容都設成看不見（visibility:hidden），瀏覽器還是要先把前面那一大疊看不見、
+//                        但依然佔用版面空間的內容排版分頁完，才會排到真正的列印內容，等於要先翻過
+//                        好幾頁空白才會看到東西。修正：把 .po-print-sheet 搬到 .wrap 外面，變成同一層
+//                        的兄弟元素，列印時改成直接把整個 .wrap 用 display:none 真正從版面移除（不是
+//                        只是看不見，是真的不佔位置），這樣列印內容前面就不會再有空白頁。
+//                        已用模擬測試驗證：相同內容，舊寫法印出10頁（大多空白），新寫法只印1頁
+// v1.16.1（2026-09-10）：★重大修正——「匯出SG採購單」不小心連續按兩次，會把剩餘庫存重複扣兩次，
+//                        因為原本每次按都直接照當下的庫存狀態重新計算扣抵，完全沒有檢查「這組資料
+//                        是不是已經匯出過」。現在會記錄每次真正的匯出（時間、匯出了哪些品項、扣了
+//                        哪些庫存），同一組（上一次快照→最新快照）如果偵測到已經匯出過，會先跳出
+//                        警告視窗列出上次的匯出時間跟扣了什麼，需要使用者確認才會繼續，避免不小心
+//                        重複扣抵。新增「採購單匯出紀錄」可以在「各品項每日累積數量與增加數」卡片
+//                        展開查看，之後不會再發生「扣了但完全查不到」的情況
+// v1.16.0（2026-09-10）：新增「拆單重拋自動偵測」——今天實際發生的AA00247事件（訂單#20260708023806644
+//                        因無法重拋，明細被刪除，但同基礎訂單號的姊妹訂單#20260708023806644A已經結案
+//                        出貨），原本要靠使用者自己去對照廠商的聊天訊息、翻原始檔案才能確認不是真的取消。
+//                        現在「品項減少」警示會自動掃描：這個SKU被刪除的訂單，有沒有「同基礎訂單號
+//                        （結尾多一個英文字母）」的姊妹訂單存在latest資料裡，如果找到，直接在警示裡
+//                        顯示姊妹訂單的編號/品項/狀態，並在按「忽略」時預設帶出「訂單拆單重拋」這個
+//                        新增的原因選項，不用再手動翻檔案佐證
+// v1.15.0（2026-09-09）：新增「庫存登記紀錄」——之前「記錄」剩餘庫存這個動作完全沒有留下時間戳，
+//                        使用者遇到AA00347的庫存扣抵想不起來當初是哪天登記的，只能翻舊截圖才找到。
+//                        現在所有登記剩餘庫存的路徑（品項減少警示的「記錄」、訂單消失警示的「登記為
+//                        剩餘庫存」、手動單筆／批次登記）都會留下一筆紀錄（日期、商品編號、名稱、
+//                        數量、來源），跟既有的「忽略紀錄」一樣可以在「訂單查詢與庫存調整」卡片展開查看
+// v1.14.4（2026-09-09）：採購單彙整列印改成一個SKU一列（不是一張採購單一列）——採購單編號直接堆疊
+//                        在同一格裡（用細線分隔），應完成數量放這個SKU的總數、垂直置中對齊，最後一樣
+//                        有總計。同時加上「同一列不要被分頁硬切開」的規則，避免像AA00308這種有5張
+//                        採購單的SKU被切成兩半印在不同頁
+// v1.14.3（2026-09-09）：採購單彙整列印再簡化——使用者自己會去查各採購單的實際數字，個別採購單那一行
+//                        改成只列「商品SKU＋採購單編號」，不再列數字；每個SKU結束後一定加一行「合計」
+//                        （不管底下有幾張採購單都會有，之前只有2張以上才顯示的邏輯已移除），把數字跟
+//                        填空格都放在合計那一行，最後一樣有總計
+// v1.14.2（2026-09-09）：採購單彙整列印新增小計／總計——製作組不用自己心算加總，每個SKU如果有
+//                        2張以上採購單會加一行小計（灰底），最後加一行總計（黑底白字）；只有1張採購單
+//                        的SKU不會多印一行重複的小計，避免不必要的行數
+// v1.14.1（2026-09-09）：採購單彙整的列印/PDF改回單欄，且從「每個SKU一行」改成「每個SKU底下
+//                        每張採購單各一行」——欄位順序改成 商品SKU／採購單編號／應完成數量／實際完成
+//                        數量，方便製作組完成後直接照著採購單編號回SG系統核銷。組內依先進先出排序，
+//                        跟畫面上展開明細的排序邏輯一致。行數變多可能會分頁，改成讓瀏覽器自然分頁
+//                        （表頭每頁重複），不再硬塞單頁
+// v1.14.0（2026-09-09）：採購單彙整新增明細展開——點SKU那一列可以展開，看還缺的量分別散布在
+//                        哪些採購單編號裡（依採購日期由小到大排序，日期缺的話退回用採購單編號的數字），
+//                        並附上累計欄位，方便依「先進先出」的順序回SG系統一筆一筆核銷。同時修正一個
+//                        原本沒處理到的資料結構：採購單編號跟採購日期只出現在每張採購單的第一列，下面
+//                        的品項列要往下繼承才能知道自己屬於哪張單，之前只做加總所以沒發現這個問題
+// v1.13.0（2026-09-09）：①修正訂單內容異動記錄的另一個誤判——訂單被拆成兩個訂單號後，其中一個先
+//                        出貨結案，原本比對邏輯只算新增/異動，結案的那部分會被排除，讓總數看起來「減少」，
+//                        其實只是正常出貨完成，不是內容被改。改成結案也算數（只有明確刪除才不算），
+//                        這樣「原本活著、後來結案」的部分不會再被誤判成內容減少。
+//                        ②採購單彙整的列印/PDF改成自動分欄——品項數量決定分成1~3欄並排顯示，同時縮小
+//                        行距，盡量塞進一頁A4，不用一直翻頁
+// v1.12.1（2026-09-09）：修正採購單彙整的列印/PDF漏掉「應完成數量」——原本只印SKU跟空白欄，
+//                        使用者反饋製作組看不到目標要做多少，沒辦法核實認列。改成三欄：商品SKU／
+//                        應完成數量／實際完成數量，讓填寫的人有目標可以對照
+// v1.12.0（2026-09-09）：①修正訂單內容異動記錄／訂單消失警示的拆單誤判——訂單有時會因為裝箱限制被拆成
+//                        兩張（例如 #123 拆成 #123 跟 #123A），拆單前後品項總數不變，但逐張訂單比對時
+//                        原本會誤判成「這張訂單品項減少了」，改成先把結尾的英文字母去掉、當同一張訂單
+//                        的家族一起比對，總數沒變就不會再誤報。
+//                        ②新增「採購單彙整」（卡片10）：上傳還沒完成的採購單整批匯出檔，自動依庫存SKU
+//                        加總「數量－已收貨」，彙整成一張表，可以列印/另存成A4直式PDF（只有SKU＋填空格，
+//                        不含商品名稱），方便一次交給製作組核對，不用一張一張採購單去對
+// v1.11.1（2026-09-08）：訂單查詢與庫存調整卡片的「快速登記剩餘庫存」新增批次貼上功能，
+//                        跟均茂到貨登記同一套邏輯——一次貼多行「商品編號 數量」，支援空白/Tab/逗號分隔，
+//                        可以直接從Excel複製兩欄貼上，用於一次登記多個SKU的多做庫存（例如對方系統
+//                        分析出的多筆「未入庫數量」異常，不用一個一個手動輸入）
+// v1.11.0（2026-09-08）：均茂備貨清單三項可用性改善——①每個到貨區間內，還缺的品項依料號排在最前面，
+//                        已到齊的往後放，回報/核對時不用整排掃過去找；②新增搜尋（料號/品名關鍵字）跟
+//                        「只顯示還缺的品項」篩選，並可匯出CSV（會照目前的篩選結果匯出，不是永遠匯出全部）；
+//                        ③表格改成貼齊寬度（不再撐滿整個卡片），品名／應到貨／已到貨／還缺欄位靠近一點，
+//                        方便核對。篩選只影響畫面顯示跟匯出內容，不影響到貨扣抵的實際計算
+// v1.10.0（2026-09-02）：新增「訂單消失警示」——對方系統的「批次確認」按鈕若沒按，訂單被取消時是直接
+//                        硬刪除，不會留下刪除或結案狀態，資料上跟「正常出貨完成」長得一模一樣，完全無法
+//                        分辨。使用者確認「結案」狀態平常不會顯示、需另外勾選才會下載到，並且已經開始把
+//                        結案一併下載，因此改用「上一次還活著、這一次完全消失、又從未出現過結案或刪除」
+//                        當作可疑訊號，主畫面用紅框持續提醒（比照品項減少、掃描全部歷史、不會自動翻篇），
+//                        可以選擇「登記為剩餘庫存」或「忽略」（需選原因）。這個功能只能抓「開始下載結案
+//                        狀態之後」發生的新事件，抓不到檔期至今已經發生過的歷史事件
+// v1.9.1（2026-09-02）：均茂到貨登記改成批次貼上——量大時一筆一筆輸入太慢，改成一個文字框可以一次貼多行
+//                        「商品編號 數量」，支援空白/Tab/逗號分隔，可以直接從Excel複製兩欄貼上，一次登記
+//                        多筆；看不懂的行會列出來、其餘正常的照樣登記，不會整批卡住
+// v1.9.0（2026-09-02）：修正均茂備貨清單的到貨扣抵邏輯——原本設計成「到貨數字只對應登記的那個區間」是錯的，
+//                        均茂送貨不是精準對應單一區間，改成「累計到貨」不分區間，扣抵時一律先扣時間最早、
+//                        還沒扣完的區間，扣滿了才輪到下一個區間；全部已知區間扣完還有剩，代表均茂已經超前
+//                        備貨，會自動留著扣抵未來出現的區間，不用重新登記。登記到貨的介面也從「每個區間
+//                        各自登記」改成單一輸入框（商品編號＋數量），不分區間，跟這個邏輯一致
+// v1.8.0（2026-09-02）：均茂備貨清單新增「登記到貨」——因為均茂實際送貨數字常常對不上（有時多有時少），
+//                        新增每個品項可以輸入本次到貨數量（累加式，分批到貨可以一直加），自動算出
+//                        「應到貨」跟「已到貨」的差額，顯示還缺多少；登記錯了可輸入負數更正，或整筆清除重登
+// v1.7.0（2026-09-02）：新增「均茂備貨清單」（卡片9）：均茂的品項之前完全被丟棄（只留一個總數字），
+//                        現在改成保留完整明細，依「到貨區間」分組列出每個區間均茂總共需要準備的
+//                        料號/名稱/數量，直列式呈現、依區間日期排序，方便通知均茂備貨。這是「最新
+//                        當下總量」不是累計淨增加——均茂的生產不是這套工具在排。
+//                        ※這個功能上線之前上傳的舊快照沒有均茂明細，需要重新上傳才有資料
+// v1.6.1（2026-08-31）：修正訂單內容異動記錄的重大誤判——心茶系統改訂單常常不是改同一行，
+//                        而是把舊明細整批標記「刪除」、用新的訂單key值重開一組幾乎一樣的新明細，
+//                        原本比對時沒濾掉刪除的舊明細，新舊兩組數量被誤加在一起，算出不存在的暴增假象
+//                        （例如訂單真正只換了一個SKU顏色款式，卻誤報成4個品項數量全部翻倍）。
+//                        修正後只拿「新增/異動」的活明細比對，跟其他地方的判斷規則一致
+// v1.6.0（2026-08-31）：訂單內容異動記錄改成只比對「這次上傳」跟「上一次上傳」這一組，
+//                        不再掃描全部歷史——訂單內容被改是檔期間天天在發生的正常現象，不像
+//                        品項減少是偶發事件，全歷史掃描會把早就翻篇的舊異動也一起挖出來，太多太雜
+// v1.5.0（2026-08-31）：訂單內容異動記錄調整——主畫面改成只顯示一行提示＋連結（點了才展開捲動過去），
+//                        避免畫面愈拉愈長；異動清單新增「出廠日期」欄位（含出廠日本身被改的提示），
+//                        並支援用出廠日期區間／訂單編號篩選，預設依出廠日期排序方便對照批次
+// v1.4.0（2026-08-31）：新增「訂單內容異動記錄」（卡片5）：自動掃描每次上傳，找出「同一張訂單編號，
+//                        內容/數量跟上一次看到的不一樣」的情況（廠商事後偷改訂單、沒有另外通知），
+//                        上傳結果最上方會用藍框主動提醒，也有獨立卡片可以瀏覽/確認全部歷史紀錄
+// v1.3.0（2026-08-27）：備份檔案改為包含 excessStock/dismissedAlerts/ignoredLog/stockUsedLog，
+//                        還原舊版備份檔會警告資料會被清空；健康檢查新增 stockUsedLog 抵扣，
+//                        避免庫存扣抵被誤判成缺口；料號解析統一轉大寫；新增上傳資料量異常防呆（防呆5）
+// v1.2.0（2026-08-20）：已上傳的每日快照清單新增收合／展開功能
+// v1.1.0（2026-08-19）：客戶確認中金色提醒、時區bug修正、逐筆比對(reconcileDelta)、
+//                        忽略原因下拉選單、紅框警示掃描全部歷史快照
+// v1.0.0：初始版本（新增/異動/刪除/結案判斷、均茂排除、SG採購單匯出、全品項健康檢查）
+// ============================================================
+const APP_VERSION = 'v1.18.0';
+const APP_VERSION_DATE = '2026-11-16';
+console.log(`心茶 出貨 禮盒製作每日增加數 ${APP_VERSION}（${APP_VERSION_DATE}）`);
+
+const STORAGE_KEY = 'xincha-giftbox-snapshots';
+let snapshots = []; // {date, uploadedAt, filename, isBaseline, items: {sku: {name, qty}}}
+let pendingFile = null;
+let tableSortState = { key: 'latestQty', dir: 'desc' }; // 詳細品項對照表的排序狀態
+let tableCompactMode = true; // 預設精簡檢視，只顯示基準/最新/較上次/較基準A，不逐日列出
+let excessStock = {}; // sku -> 訂單取消但已經做好、留在架上的多餘庫存數量
+const EXCESS_STOCK_KEY = 'xincha-excess-stock';
+let dismissedAlerts = {}; // "prevUploadedAt|latestUploadedAt|sku" -> true，已忽略的減少警示
+const DISMISSED_ALERTS_KEY = 'xincha-dismissed-alerts';
+let ignoredLog = []; // [{date, sku, name, qty, reason, note}]，忽略時記錄的原因歷史
+const IGNORED_LOG_KEY = 'xincha-ignored-log';
+let recordedLog = []; // [{date, sku, name, qty, source}]，每次登記剩餘庫存的時間點與來源，方便之後想不起來時查
+const RECORDED_LOG_KEY = 'xincha-recorded-log';
+let exportedPairs = {}; // "prevUploadedAt|latestUploadedAt" -> {exportedAt, rows:[{sku,name,qty}], stockUsed:[{sku,qty}]}
+                         // 每次真正匯出SG採購單的紀錄——用來防止同一組資料被重複匯出時重複扣庫存，也留下時間戳可以查
+const EXPORTED_PAIRS_KEY = 'xincha-exported-pairs';
+let stockUsedLog = {}; // sku -> 從基準日至今，累計「用剩餘庫存直接抵掉、沒有另外開單製作」的數量（健康檢查要用這個數字才不會把庫存抵扣誤判成缺口）
+const STOCK_USED_LOG_KEY = 'xincha-stock-used-log';
+let dismissedOrderChanges = {}; // "prevUploadedAt|latestUploadedAt|orderNo" -> true，已確認知道的訂單內容異動
+const ORDER_CHANGE_DISMISS_KEY = 'xincha-dismissed-order-changes';
+let warehouseReceivedTotal = {}; // sku -> 累計已登記的均茂到貨數量（不分區間）。扣抵時依區間時間先後，先扣最早還欠的區間，扣完再輪到下一個區間，多送的量會留著自動扣抵未來區間，不會綁死在特定一週
+const WAREHOUSE_RECEIVED_KEY = 'xincha-warehouse-received-total';
+let dismissedVanishedOrders = {}; // "prevUploadedAt|latestUploadedAt|orderNo" -> true，已處理過的「訂單消失」警示
+const VANISHED_ORDER_DISMISS_KEY = 'xincha-dismissed-vanished-orders';
+
+function setTableSort(key){
+  if (tableSortState.key === key){
+    tableSortState.dir = tableSortState.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    tableSortState.key = key;
+    // 文字欄位預設正序、數字欄位預設倒序（由大到小）比較直覺
+    tableSortState.dir = (key === 'sku' || key === 'name') ? 'asc' : 'desc';
+  }
+  render();
+}
+let pendingParsed = null;
+
+const dateInput = document.getElementById('snap-date');
+const fileInput = document.getElementById('file-input');
+const dropZone = document.getElementById('drop-zone');
+const dropLabel = document.getElementById('drop-label');
+const uploadBtn = document.getElementById('upload-btn');
+const uploadMsg = document.getElementById('upload-msg');
+
+function todayStr(){
+  const d = new Date();
+  const tz = new Date(d.getTime() - d.getTimezoneOffset()*60000);
+  return tz.toISOString().slice(0,10);
+}
+dateInput.value = todayStr();
+
+const shipToInput = document.getElementById('ship-to');
+const windowDaysInput = document.getElementById('window-days');
+
+function addDays(dateStr, n){
+  // 用 UTC 方式計算，避免瀏覽器在 UTC+8（台灣）時區時，本地午夜轉成UTC會退回前一天，導致日期少算一天
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + n);
+  return dt.toISOString().slice(0,10);
+}
+
+function nowTimeLabel(){
+  const d = new Date();
+  return d.toTimeString().slice(0,5); // HH:MM
+}
+
+function showDecisionModal(message, {showAdd = true, title = '同一天已經有上傳紀錄', overwriteLabel = '覆蓋這筆', addLabel = '新增為另一筆', cancelLabel = '取消上傳'} = {}){
+  return new Promise((resolve) => {
+    const overlay = document.getElementById('modal-overlay');
+    document.getElementById('modal-title').textContent = title;
+    document.getElementById('modal-msg').textContent = message;
+    const addBtn = document.getElementById('modal-add');
+    const overwriteBtnEl = document.getElementById('modal-overwrite');
+    const cancelBtnEl = document.getElementById('modal-cancel');
+    overwriteBtnEl.textContent = overwriteLabel;
+    addBtn.textContent = addLabel;
+    cancelBtnEl.textContent = cancelLabel;
+    addBtn.style.display = showAdd ? '' : 'none';
+    overlay.style.display = 'flex';
+
+    function cleanup(result){
+      overlay.style.display = 'none';
+      overwriteBtn.removeEventListener('click', onOverwrite);
+      addBtn.removeEventListener('click', onAdd);
+      cancelBtn.removeEventListener('click', onCancel);
+      resolve(result);
+    }
+    const overwriteBtn = document.getElementById('modal-overwrite');
+    const cancelBtn = document.getElementById('modal-cancel');
+    function onOverwrite(){ cleanup('overwrite'); }
+    function onAdd(){ cleanup('add'); }
+    function onCancel(){ cleanup('cancel'); }
+    overwriteBtn.addEventListener('click', onOverwrite);
+    addBtn.addEventListener('click', onAdd);
+    cancelBtn.addEventListener('click', onCancel);
+  });
+}
+
+function refreshShipWindow(){
+  const n = parseInt(windowDaysInput.value, 10);
+  if (!n || n < 1){ shipToInput.value = ''; return; }
+  shipToInput.value = addDays(dateInput.value, n - 1);
+}
+refreshShipWindow();
+dateInput.addEventListener('change', refreshShipWindow);
+windowDaysInput.addEventListener('input', refreshShipWindow);
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files.length) handleFile(e.target.files[0]);
+});
+
+function handleFile(file){
+  pendingFile = file;
+  dropLabel.innerHTML = `<span class="fname">${escapeHtml(file.name)}</span>`;
+  uploadBtn.disabled = false;
+  showMsg('', null);
+}
+
+function showMsg(text, type){
+  if (!text){ uploadMsg.classList.remove('show'); return; }
+  uploadMsg.textContent = text;
+  uploadMsg.className = 'msg show ' + (type||'');
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function snapDisp(s){
+  return s.label ? `${s.date}(${s.label})` : s.date;
+}
+
+async function recordExcessStock(sku, pairs, name){
+  const input = document.querySelector(`.excess-input[data-sku="${sku}"]`);
+  const val = parseInt(input.value, 10);
+  if (isNaN(val) || val <= 0){
+    alert('請輸入大於0的數量');
+    return;
+  }
+  excessStock[sku] = (excessStock[sku] || 0) + val;
+  (pairs || []).forEach(p => {
+    dismissedAlerts[`${p.prevUploadedAt}|${p.latestUploadedAt}|${sku}`] = true;
+  });
+  if (pairs && pairs.length) await saveDismissedAlerts();
+  await saveExcessStock();
+  await logStockRecord(sku, name, val, '品項減少警示');
+  render();
+}
+
+async function clearExcessStock(sku){
+  if (!confirm(`確定要清除 ${sku} 的庫存記錄嗎？`)) return;
+  delete excessStock[sku];
+  await saveExcessStock();
+  render();
+}
+
+function excessStockNoteBlock(){
+  const entries = Object.entries(excessStock).filter(([,qty]) => qty > 0);
+  if (!entries.length) return '';
+  return `
+    <div class="hero-sub-stat" style="text-align:left;">
+      <div class="hero-sub-label">目前登記的剩餘庫存（下次增加時會自動先扣掉）</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
+        ${entries.map(([sku,qty]) => `
+          <span style="background:rgba(255,255,255,0.15);color:#fff;padding:4px 10px;border-radius:999px;font-size:12.5px;display:inline-flex;align-items:center;gap:6px;">
+            ${escapeHtml(sku)}：${qty}
+            <span style="cursor:pointer;opacity:0.7;" onclick="clearExcessStock('${escapeHtml(sku)}')">✕</span>
+          </span>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// 只有 A / B 開頭的料號才算是「禮盒」；用來過濾掉舊資料裡可能殘留的非禮盒品項
+function isBoxSku(sku){
+  const c = String(sku).charAt(0).toUpperCase();
+  return c === 'A' || c === 'B';
+}
+
+// 用「任一天的製作許可日上限」重新彙總某一筆快照的明細 → 讓不同天數設定之間也能公平比較
+// 舊資料（沒有 rawLines）沒辦法重新套用，退回用當初存的 items（等於沿用當天自己的天數設定）
+function itemsForThreshold(snap, shipTo){
+  if (!snap.rawLines || !snap.rawLines.length){
+    return { items: snap.items, exact: false };
+  }
+  const items = {};
+  snap.rawLines.forEach(r => {
+    const status = r.status || '新增'; // 舊資料沒有存狀態欄位時，視同新增
+    if ((status === '新增' || status === '異動') && r.permitDate <= shipTo){
+      if (!items[r.sku]) items[r.sku] = {name:r.name, qty:0};
+      items[r.sku].qty += r.qty;
+    }
+  });
+  return { items, exact: true };
+}
+
+// 檢查一筆快照的明細，是不是大多數都有「訂單key值」可以逐筆比對
+// 舊版資料（在這個功能上線之前存的）沒有 key 欄位，不能拿來逐筆比對，否則每一筆都會被誤判成「全新」
+function snapHasKeys(snap){
+  if (!snap.rawLines || !snap.rawLines.length) return false;
+  const withKey = snap.rawLines.filter(r => r.key).length;
+  return withKey / snap.rawLines.length > 0.5;
+}
+
+// 逐筆用「訂單key值」比對兩筆快照，算出「真正的淨增加」
+// 核心觀念：訂單「出貨完成消失」不代表不用再做，因為做出來的貨已經跟著出掉了；
+// 只有「明確被刪除」才代表真的不需要製作，才會被扣掉。找不到對應舊紀錄、或狀態消失不明的，一律當作新增才安全（寧可多做，不要少做）。
+function reconcileDelta(prevSnap, latestSnap, shipTo){
+  if (!snapHasKeys(prevSnap) || !snapHasKeys(latestSnap)){
+    // 舊資料沒有 key 值可以逐筆比對，退回用 SKU 加總相減（舊版行為，各自用自己當時的天數）
+    const latestAgg = itemsForThreshold(latestSnap, latestSnap.shipTo || shipTo).items;
+    const prevAgg = itemsForThreshold(prevSnap, prevSnap.shipTo || shipTo).items;
+    const delta = {};
+    const names = {};
+    const allSkus = new Set([...Object.keys(latestAgg), ...Object.keys(prevAgg)]);
+    allSkus.forEach(sku => {
+      delta[sku] = (latestAgg[sku]?.qty||0) - (prevAgg[sku]?.qty||0);
+      names[sku] = latestAgg[sku]?.name || prevAgg[sku]?.name || '';
+    });
+    return { delta, names, exact: false };
+  }
+
+  const prevShipTo = prevSnap.shipTo || shipTo; // 基準日／前一筆「當時自己」的天數範圍
+  const latestShipTo = latestSnap.shipTo || shipTo; // 這一筆「現在」的天數範圍
+
+  const prevByKey = new Map();
+  prevSnap.rawLines.forEach(r => { if (r.key) prevByKey.set(r.key, r); });
+  const latestByKey = new Map();
+  latestSnap.rawLines.forEach(r => { if (r.key) latestByKey.set(r.key, r); });
+
+  const delta = {};
+  const names = {};
+  function addDelta(sku, name, amt){
+    delta[sku] = (delta[sku]||0) + amt;
+    if (name) names[sku] = name;
+  }
+
+  // 正向：latest 裡「現在算在視窗內」的新增/異動列
+  latestByKey.forEach((row, key) => {
+    if ((row.status !== '新增' && row.status !== '異動') || row.permitDate > latestShipTo) return;
+    const prevRow = prevByKey.get(key);
+    if (!prevRow){
+      addDelta(row.sku, row.name, row.qty); // 全新的訂單列
+      return;
+    }
+    // 關鍵：用「前一筆自己當時的天數範圍」判斷它當初有沒有被算過，不能用今天的範圍回頭套用
+    // 否則像「訂單很早就存在，但出廠日剛好落在後來才拉寬的範圍內」這種情況，會被誤判成早就算過，永遠不會被觸發
+    const prevWasCounted = (prevRow.status === '新增' || prevRow.status === '異動') && prevRow.permitDate <= prevShipTo;
+    if (prevWasCounted){
+      const diff = row.qty - prevRow.qty;
+      if (diff !== 0) addDelta(row.sku, row.name, diff); // 同一筆訂單數量變動
+    } else {
+      addDelta(row.sku, row.name, row.qty); // 之前沒被算進視窗內（剛進入範圍、或剛從刪除/結案復活），視同新增
+    }
+  });
+
+  // 反向：prev 裡「當初（用它自己的範圍）算在視窗內」的新增/異動列，檢查現在怎麼樣了
+  prevByKey.forEach((row, key) => {
+    if ((row.status !== '新增' && row.status !== '異動') || row.permitDate > prevShipTo) return;
+    const latestRow = latestByKey.get(key);
+    if (!latestRow){
+      // 完全找不到了：無法確認是出貨完成還是被刪除，安全起見「不扣」（假設已出貨，不影響新增數）
+      return;
+    }
+    const stillCountedNow = (latestRow.status === '新增' || latestRow.status === '異動') && latestRow.permitDate <= latestShipTo;
+    if (stillCountedNow){
+      return; // 正向那一輪已經處理過數量變動了，這裡不重複計算
+    }
+    if (latestRow.status && latestRow.status.includes('刪除')){
+      addDelta(row.sku, row.name, -row.qty); // 明確被取消（狀態包含「刪除」，不限定完全等於「刪除」兩個字），真的要扣掉
+    } else if (latestRow.status === '新增' || latestRow.status === '異動'){
+      addDelta(row.sku, row.name, -row.qty); // 狀態還在，但出廠日超出現在的範圍（天數縮小），近期不用做了，先扣掉
+    }
+    // 其他狀態（結案、或任何未知的新狀態）→ 不扣，安全起見當作已出貨/已完成處理，寧可多做不要少做
+  });
+
+  return { delta, names, exact: true };
+}
+
+// ---------- Parse xlsx ----------
+function toDateStr(val){
+  // Handles JS Date objects, Excel serial numbers, and 'YYYY/MM/DD' style strings
+  if (val === null || val === undefined || val === '') return null;
+  if (val instanceof Date && !isNaN(val)){
+    return val.toISOString().slice(0,10);
+  }
+  if (typeof val === 'number'){
+    const d = XLSX.SSF.parse_date_code(val);
+    if (!d) return null;
+    return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
+  }
+  const s = String(val).trim();
+  const m = s.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  return null;
+}
+
+function parseOrderFile(file, shipTo){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, {type:'array', cellDates:true});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
+        if (!rows.length) return reject(new Error('檔案是空的'));
+
+        // 支援兩種格式：
+        // A) 廠商訂單確認總表（新格式，含 料號/出庫倉別/訂單狀態）－ 優先判斷
+        // B) 物流表B2C（舊格式，含 商品編號/單號）－ 向下相容
+        let headerRowIdx = -1, headerMap = {}, formatType = null;
+        for (let i=0;i<Math.min(rows.length,10);i++){
+          const row = rows[i].map(c => c===null||c===undefined?'':String(c).trim());
+          if (row.includes('料號') && row.includes('出庫倉別')){
+            headerRowIdx = i; formatType = 'vendor';
+            row.forEach((h,idx) => { if(h) headerMap[h] = idx; });
+            break;
+          }
+          if (row.includes('商品編號') && row.includes('數量')){
+            headerRowIdx = i; formatType = 'b2c';
+            row.forEach((h,idx) => { if(h) headerMap[h] = idx; });
+            break;
+          }
+        }
+        if (headerRowIdx === -1) return reject(new Error('找不到可辨識的欄位（料號/出庫倉別 或 商品編號/數量），請確認檔案格式'));
+
+        let idxSku, idxName, idxQty, idxOrderNo, idxShipDate, idxPermitDate, idxStatus, idxWarehouse, idxKey, idxArrivalWindow;
+        if (formatType === 'vendor'){
+          idxSku = headerMap['料號'];
+          idxName = headerMap['EIP品名'];
+          idxQty = headerMap['數量'];
+          idxOrderNo = headerMap['電商平台訂單單號'];
+          idxShipDate = headerMap['最早可出廠日'];
+          idxPermitDate = headerMap['製作許可日(實際給包裝廠的日期)'];
+          idxStatus = headerMap['訂單狀態'];
+          idxWarehouse = headerMap['出庫倉別'];
+          idxKey = headerMap['訂單key值'];
+          idxArrivalWindow = headerMap['到貨區間'];
+        } else {
+          idxSku = headerMap['商品編號'];
+          idxName = headerMap['商品名稱'];
+          idxQty = headerMap['數量'];
+          idxOrderNo = headerMap['單號'];
+          idxShipDate = headerMap['最早可出廠日'];
+          idxPermitDate = undefined; // 舊格式沒有這個欄位，之後會退回用最早可出廠日
+          idxKey = headerMap['心茶訂單key值'];
+        }
+
+        const items = {}; // sku -> {name, qty}  (依「這次填的天數」+「新增/異動」篩出的當日總量，跟以前一樣)
+        const rawLines = []; // {key, sku, name, qty, shipDate, permitDate, status}  完整明細（含新增/異動/刪除/結案，只排除均茂/非禮盒料號，不受天數/狀態限制)－ 用來之後做逐筆比對
+        const excludedWarehouseItems = {}; // sku -> {name, qty}  (均茂：免製作，只包裝)
+        const warehouseLines = []; // {sku, name, qty, status, arrivalWindow, shipDate, orderNo}  均茂的完整明細，用來做「均茂備貨清單」（依到貨區間分組），跟 rawLines 分開存，因為均茂不算在禮盒製作排程裡
+        let lineCount = 0;
+        let skippedOutOfWindow = 0;
+        let skippedNoShipDate = 0;
+        let skippedStatus = 0;
+        let excludedWarehouseQty = 0;
+        const excludedNonBoxSkuCount = new Set(); // 非 A/B 開頭，料件/配件，不算禮盒
+        let excludedNonBoxQty = 0;
+        const orderSet = new Set();
+
+        for (let i=headerRowIdx+1;i<rows.length;i++){
+          const row = rows[i];
+          if (!row || row.every(c => c===null || c==='')) continue;
+          const sku = row[idxSku];
+          if (sku===null || sku===undefined || String(sku).trim()==='') continue;
+
+          const skuStr = String(sku).trim().toUpperCase();
+          const name = idxName!==undefined ? String(row[idxName]||'').trim() : '';
+          let qty = idxQty!==undefined ? row[idxQty] : 0;
+          qty = Number(qty) || 0;
+          const statusVal = idxStatus!==undefined ? (row[idxStatus] ? String(row[idxStatus]).trim() : '') : '新增'; // 舊格式沒有狀態欄位，視同新增
+          const keyVal = idxKey!==undefined && row[idxKey] ? String(row[idxKey]).trim() : (idxOrderNo!==undefined && row[idxOrderNo] ? String(row[idxOrderNo]).trim()+'-'+skuStr : null);
+
+          // 只有 A / B 開頭的料號才是需要製作的「禮盒」，其他開頭的都是料件/配件，整個流程都排除
+          const firstChar = skuStr.charAt(0).toUpperCase();
+          if (firstChar !== 'A' && firstChar !== 'B'){
+            excludedNonBoxSkuCount.add(skuStr);
+            excludedNonBoxQty += qty;
+            continue;
+          }
+
+          // 均茂：現貨只需包裝，不需要製作 → 排除在「需要製作」的統計之外，但保留完整明細供「均茂備貨清單」使用
+          const warehouseVal = idxWarehouse!==undefined && row[idxWarehouse] ? String(row[idxWarehouse]).trim() : '';
+          if (warehouseVal === '均茂'){
+            if (!excludedWarehouseItems[skuStr]) excludedWarehouseItems[skuStr] = {name, qty:0};
+            excludedWarehouseItems[skuStr].qty += qty;
+            excludedWarehouseQty += qty;
+            const arrivalWindowVal = idxArrivalWindow!==undefined && row[idxArrivalWindow] ? String(row[idxArrivalWindow]).trim() : '';
+            warehouseLines.push({ sku: skuStr, name, qty, status: statusVal, arrivalWindow: arrivalWindowVal || null, shipDate: idxShipDate!==undefined ? toDateStr(row[idxShipDate]) : null, orderNo: idxOrderNo!==undefined && row[idxOrderNo] ? String(row[idxOrderNo]).trim() : null });
+            continue;
+          }
+
+          // 最早可出廠日：保留下來當參考用（顯示這批大概什麼時候出貨），沒有的話不影響是否列入
+          const shipDateStr = idxShipDate!==undefined ? toDateStr(row[idxShipDate]) : null;
+
+          // 製作許可日：這是真正決定「今天該不該算進生產」的日期。舊格式沒有這個欄位時，退回用最早可出廠日代替
+          const permitDateStr = idxPermitDate!==undefined ? toDateStr(row[idxPermitDate]) : shipDateStr;
+          if (!permitDateStr){
+            skippedNoShipDate++;
+            continue;
+          }
+
+          // 完整明細都先存起來（含各種狀態、不受本次天數限制），供之後逐筆比對、訂單查詢用
+          const orderNoVal = idxOrderNo!==undefined && row[idxOrderNo] ? String(row[idxOrderNo]).trim() : null;
+          rawLines.push({ key: keyVal, sku: skuStr, name, qty, shipDate: shipDateStr, permitDate: permitDateStr, status: statusVal, orderNo: orderNoVal });
+
+          if (statusVal !== '新增' && statusVal !== '異動'){
+            skippedStatus++;
+            continue; // 刪除/結案的列不算進「這次視窗總量」，但已經存進 rawLines 供比對辨識用
+          }
+
+          if (orderNoVal) orderSet.add(orderNoVal);
+
+          // 依「製作許可日 <= 本次天數上限」篩出「這次上傳當下」要顯示的總量（不是用出廠日）
+          if (shipTo && permitDateStr > shipTo){
+            skippedOutOfWindow++;
+            continue;
+          }
+          if (!items[skuStr]) items[skuStr] = {name: name, qty: 0};
+          items[skuStr].qty += qty;
+          if (name && !items[skuStr].name) items[skuStr].name = name;
+          lineCount++;
+        }
+
+        if (Object.keys(items).length === 0) return reject(new Error('篩選後沒有任何商品資料列，請確認「抓未來幾天內」的設定是否正確'));
+
+        resolve({
+          items, rawLines, lineCount, orderCount: orderSet.size,
+          skippedOutOfWindow, skippedNoShipDate, skippedStatus,
+          excludedWarehouseQty, excludedWarehouseSkuCount: Object.keys(excludedWarehouseItems).length,
+          excludedNonBoxQty, excludedNonBoxSkuCount: excludedNonBoxSkuCount.size,
+          warehouseLines,
+          formatType
+        });
+      } catch(err){
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(new Error('讀取檔案失敗'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ---------- Storage（v1.18.0 起：正式網址存 Firestore，其他地方開啟＝試用模式存瀏覽器） ----------
+// 結構：
+//   xintea_giftbox/{key}                 小資料（剩餘庫存、各種紀錄），欄位 value = JSON 字串
+//   xintea_giftbox_snaps/{id}            每筆快照的摘要（不含明細），id = uploadedAt
+//   xintea_giftbox_snaps/{id}/chunks/{n} 快照明細（rawLines / warehouseLines）切塊存放，避開單一文件 1MB 上限
+const LIVE_HOSTS = ['jay77jay.github.io'];   // ★★★ 這些網域連正式資料庫
+const firebaseConfig = {
+  apiKey: "AIzaSyBmb_51Pq-QatHwKkcrNlKw0B6e8YmKAsw",
+  authDomain: "ezfun-warehouse-billing.firebaseapp.com",
+  projectId: "ezfun-warehouse-billing",
+  storageBucket: "ezfun-warehouse-billing.firebasestorage.app",
+  messagingSenderId: "175590672953",
+  appId: "1:175590672953:web:6304ddce7b45b191529be8"
+};
+const COL_KV = 'xintea_giftbox';
+const COL_SNAP = 'xintea_giftbox_snaps';
+const CHUNK_LINES = 1500;   // 每塊明細列數（約 300KB）
+const DEMO = !LIVE_HOSTS.includes(location.hostname);
+let fdb = null;
+let savedSnapMeta = {};      // id -> 上次存檔時的摘要 JSON，用來判斷哪些快照要重寫
+
+function sysBar(id, text){
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (text){ el.textContent = text; el.style.display = ''; } else { el.style.display = 'none'; }
+}
+function cloudErr(where, e){
+  console.error(where, e);
+  sysBar('err-bar', `⚠ ${where}失敗：${e && e.message || e}。這次的變更可能沒有存到雲端，請先不要關閉頁面，重新整理後確認資料，必要時下載備份檔。`);
+}
+
+async function storageGet(key){
+  if (DEMO){
+    try { const val = localStorage.getItem(key); return val !== null ? {key, value: val} : null; } catch(e){ return null; }
+  }
+  const d = await fdb.collection(COL_KV).doc(key).get();   // 讀取失敗直接丟出，讓啟動流程顯示紅色提示，不要當成「沒有資料」
+  return d.exists ? {key, value: d.data().value} : null;
+}
+
+async function storageSet(key, value){
+  if (DEMO){
+    try { localStorage.setItem(key, value); return {key, value}; } catch(e){ console.error('localStorage.setItem failed', e); return null; }
+  }
+  try {
+    await fdb.collection(COL_KV).doc(key).set({ value, updatedAt: new Date().toISOString(), by: (firebase.auth().currentUser||{}).email || '' });
+    return {key, value};
+  } catch(e){ cloudErr('儲存', e); return null; }
+}
+
+function snapId(s){ return String(s.uploadedAt).replace(/[\/.]/g, '_'); }
+function snapMetaOf(s){ const m = Object.assign({}, s); delete m.rawLines; delete m.warehouseLines; return m; }
+
+async function loadSnapshots(){
+  if (DEMO){
+    try { const v = localStorage.getItem(STORAGE_KEY); snapshots = v ? JSON.parse(v) : []; } catch(e){ snapshots = []; }
+  } else {
+    const qs = await fdb.collection(COL_SNAP).get();
+    const list = [];
+    let done = 0;
+    for (const doc of qs.docs){
+      sysBar('load-bar', `讀取快照中… ${++done} / ${qs.size}`);
+      const meta = doc.data();
+      const ch = await doc.ref.collection('chunks').get();
+      const parts = ch.docs.map(c => c.data()).sort((a,b) => a.n - b.n);
+      const snap = Object.assign({}, meta);
+      snap.rawLines = [].concat(...parts.filter(p => p.kind === 'raw').map(p => JSON.parse(p.json)));
+      snap.warehouseLines = [].concat(...parts.filter(p => p.kind === 'wh').map(p => JSON.parse(p.json)));
+      const expect = meta._rawCount || 0;
+      if (snap.rawLines.length !== expect) throw new Error(`快照 ${snapDisp(meta)} 明細不完整（應有 ${expect} 列，讀到 ${snap.rawLines.length} 列）`);
+      delete snap._rawCount; delete snap._whCount;
+      list.push(snap);
+      savedSnapMeta[doc.id] = JSON.stringify(snapMetaOf(snap));
+    }
+    snapshots = list;
+  }
+  snapshots.sort((a,b) => (a.uploadedAt||'').localeCompare(b.uploadedAt||''));
+}
+
+async function writeSnapFull(s){
+  const ref = fdb.collection(COL_SNAP).doc(snapId(s));
+  const old = await ref.collection('chunks').get();
+  for (const c of old.docs) await c.ref.delete();
+  const raw = s.rawLines || [], wh = s.warehouseLines || [];
+  let n = 0;
+  for (let i = 0; i < raw.length; i += CHUNK_LINES) await ref.collection('chunks').doc(String(n)).set({ n: n++, kind: 'raw', json: JSON.stringify(raw.slice(i, i + CHUNK_LINES)) });
+  for (let i = 0; i < wh.length; i += CHUNK_LINES) await ref.collection('chunks').doc(String(n)).set({ n: n++, kind: 'wh', json: JSON.stringify(wh.slice(i, i + CHUNK_LINES)) });
+  // 摘要最後寫：摘要存在＝明細已經寫完
+  await ref.set(Object.assign(snapMetaOf(s), { _rawCount: raw.length, _whCount: wh.length }));
+}
+
+async function deleteSnapDoc(id){
+  const ref = fdb.collection(COL_SNAP).doc(id);
+  await ref.delete();   // 先刪摘要，讀取時就不會讀到殘缺的快照
+  const ch = await ref.collection('chunks').get();
+  for (const c of ch.docs) await c.ref.delete();
+}
+
+async function saveSnapshots(){
+  if (DEMO) return !!(await (async () => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshots)); return true; } catch(e){ return false; } })());
+  try {
+    const now = {};
+    snapshots.forEach(s => now[snapId(s)] = s);
+    for (const id of Object.keys(savedSnapMeta)){
+      if (!now[id]){ await deleteSnapDoc(id); delete savedSnapMeta[id]; }
+    }
+    for (const [id, s] of Object.entries(now)){
+      const metaJson = JSON.stringify(snapMetaOf(s));
+      if (!(id in savedSnapMeta)){
+        sysBar('load-bar', `上傳快照到雲端中…（${snapDisp(s)}）`);
+        await writeSnapFull(s);
+      } else if (savedSnapMeta[id] !== metaJson){
+        await fdb.collection(COL_SNAP).doc(id).set(Object.assign(snapMetaOf(s), { _rawCount: (s.rawLines||[]).length, _whCount: (s.warehouseLines||[]).length }));
+      }
+      savedSnapMeta[id] = metaJson;
+    }
+    sysBar('load-bar', '');
+    return true;
+  } catch(e){
+    sysBar('load-bar', '');
+    cloudErr('快照存到雲端', e);
+    return false;
+  }
+}
+
+async function loadExcessStock(){
+  try {
+    const res = await storageGet(EXCESS_STOCK_KEY);
+    excessStock = res && res.value ? JSON.parse(res.value) : {};
+  } catch(e){
+    excessStock = {};
+  }
+}
+
+async function saveExcessStock(){
+  const ok = await storageSet(EXCESS_STOCK_KEY, JSON.stringify(excessStock));
+  return !!ok;
+}
+
+async function loadDismissedAlerts(){
+  try {
+    const res = await storageGet(DISMISSED_ALERTS_KEY);
+    dismissedAlerts = res && res.value ? JSON.parse(res.value) : {};
+  } catch(e){
+    dismissedAlerts = {};
+  }
+}
+
+async function saveDismissedAlerts(){
+  const ok = await storageSet(DISMISSED_ALERTS_KEY, JSON.stringify(dismissedAlerts));
+  return !!ok;
+}
+
+async function loadIgnoredLog(){
+  try {
+    const res = await storageGet(IGNORED_LOG_KEY);
+    ignoredLog = res && res.value ? JSON.parse(res.value) : [];
+  } catch(e){
+    ignoredLog = [];
+  }
+}
+
+async function saveIgnoredLog(){
+  const ok = await storageSet(IGNORED_LOG_KEY, JSON.stringify(ignoredLog));
+  return !!ok;
+}
+
+async function loadRecordedLog(){
+  try {
+    const res = await storageGet(RECORDED_LOG_KEY);
+    recordedLog = res && res.value ? JSON.parse(res.value) : [];
+  } catch(e){
+    recordedLog = [];
+  }
+}
+
+async function saveRecordedLog(){
+  const ok = await storageSet(RECORDED_LOG_KEY, JSON.stringify(recordedLog));
+  return !!ok;
+}
+
+// 每次把品項登記進剩餘庫存時都呼叫這個，留下時間戳跟來源，避免之後想不起來當初為什麼、什麼時候登記的
+async function logStockRecord(sku, name, qty, source){
+  recordedLog.push({ date: todayStr(), sku, name: name || '', qty, source });
+  await saveRecordedLog();
+}
+
+async function loadExportedPairs(){
+  try {
+    const res = await storageGet(EXPORTED_PAIRS_KEY);
+    exportedPairs = res && res.value ? JSON.parse(res.value) : {};
+  } catch(e){
+    exportedPairs = {};
+  }
+}
+
+async function saveExportedPairs(){
+  const ok = await storageSet(EXPORTED_PAIRS_KEY, JSON.stringify(exportedPairs));
+  return !!ok;
+}
+
+async function loadStockUsedLog(){
+  try {
+    const res = await storageGet(STOCK_USED_LOG_KEY);
+    stockUsedLog = res && res.value ? JSON.parse(res.value) : {};
+  } catch(e){
+    stockUsedLog = {};
+  }
+}
+
+async function saveStockUsedLog(){
+  const ok = await storageSet(STOCK_USED_LOG_KEY, JSON.stringify(stockUsedLog));
+  return !!ok;
+}
+
+async function loadDismissedOrderChanges(){
+  try {
+    const res = await storageGet(ORDER_CHANGE_DISMISS_KEY);
+    dismissedOrderChanges = res && res.value ? JSON.parse(res.value) : {};
+  } catch(e){
+    dismissedOrderChanges = {};
+  }
+}
+
+async function saveDismissedOrderChanges(){
+  const ok = await storageSet(ORDER_CHANGE_DISMISS_KEY, JSON.stringify(dismissedOrderChanges));
+  return !!ok;
+}
+
+async function loadWarehouseReceived(){
+  try {
+    const res = await storageGet(WAREHOUSE_RECEIVED_KEY);
+    warehouseReceivedTotal = res && res.value ? JSON.parse(res.value) : {};
+  } catch(e){
+    warehouseReceivedTotal = {};
+  }
+}
+
+async function saveWarehouseReceived(){
+  const ok = await storageSet(WAREHOUSE_RECEIVED_KEY, JSON.stringify(warehouseReceivedTotal));
+  return !!ok;
+}
+
+async function loadDismissedVanishedOrders(){
+  try {
+    const res = await storageGet(VANISHED_ORDER_DISMISS_KEY);
+    dismissedVanishedOrders = res && res.value ? JSON.parse(res.value) : {};
+  } catch(e){
+    dismissedVanishedOrders = {};
+  }
+}
+
+async function saveDismissedVanishedOrders(){
+  const ok = await storageSet(VANISHED_ORDER_DISMISS_KEY, JSON.stringify(dismissedVanishedOrders));
+  return !!ok;
+}
+
+function alertKey(prevSnap, latestSnap, sku){
+  return `${prevSnap.uploadedAt}|${latestSnap.uploadedAt}|${sku}`;
+}
+
+async function dismissNegativeAlert(prevUploadedAt, latestUploadedAt, sku){
+  dismissedAlerts[`${prevUploadedAt}|${latestUploadedAt}|${sku}`] = true;
+  await saveDismissedAlerts();
+  render();
+}
+
+function showIgnoreReasonModal(message, defaultValue){
+  return new Promise((resolve) => {
+    const overlay = document.getElementById('reason-modal-overlay');
+    document.getElementById('reason-modal-msg').textContent = message;
+    const select = document.getElementById('reason-modal-select');
+    if (defaultValue && [...select.options].some(o => o.value === defaultValue)){
+      select.value = defaultValue;
+    } else {
+      select.selectedIndex = 0;
+    }
+    overlay.style.display = 'flex';
+
+    function cleanup(result){
+      overlay.style.display = 'none';
+      confirmBtn.removeEventListener('click', onConfirm);
+      cancelBtn.removeEventListener('click', onCancel);
+      resolve(result);
+    }
+    const confirmBtn = document.getElementById('reason-modal-confirm');
+    const cancelBtn = document.getElementById('reason-modal-cancel');
+    function onConfirm(){ cleanup(select.value); }
+    function onCancel(){ cleanup(null); }
+    confirmBtn.addEventListener('click', onConfirm);
+    cancelBtn.addEventListener('click', onCancel);
+  });
+}
+
+async function dismissNegativeAlertMulti(pairs, sku, name, qty, hasSplitEvidence){
+  const reason = await showIgnoreReasonModal(
+    `${sku}（${name||''}）減少了 ${qty} 個，忽略前想請您確認一下原因，方便之後回頭查：`,
+    hasSplitEvidence ? '訂單拆單重拋（同基礎訂單號有姊妹訂單，已出貨或已結案）' : null
+  );
+  if (!reason) return; // 選「先不忽略」，維持警示
+
+  ignoredLog.push({ date: todayStr(), sku, name: name||'', qty, reason });
+  await saveIgnoredLog();
+
+  (pairs || []).forEach(p => {
+    dismissedAlerts[`${p.prevUploadedAt}|${p.latestUploadedAt}|${sku}`] = true;
+  });
+  await saveDismissedAlerts();
+  render();
+}
+
+// 偵測「拆單重拋」：某個key被明確刪除時，看latest裡有沒有「同一個SKU、同一個基礎訂單號（結尾多了個
+// 英文字母）」的姊妹訂單存在——這種情況通常代表訂單被拆單重新送出，不是真的取消。
+// 這是這次跟使用者一起查AA00247事件（訂單被拆成...644跟...644A/B）發現的真實案例，值得自動偵測，
+// 不然每次都要手動翻原始檔案才能發現。
+function detectSplitReissueEvidence(prevSnap, latestSnap, sku){
+  if (!prevSnap.rawLines || !latestSnap.rawLines) return [];
+  const latestByBase = new Map(); // 不篩SKU：只要是同一個基礎訂單號底下的任何品項，都算拆單的佐證
+  latestSnap.rawLines.forEach(r => {
+    if (!r.orderNo) return;
+    const base = baseOrderNo(r.orderNo);
+    if (!latestByBase.has(base)) latestByBase.set(base, []);
+    latestByBase.get(base).push(r);
+  });
+  const latestByKey = new Map();
+  latestSnap.rawLines.forEach(r => { if (r.sku === sku && r.key) latestByKey.set(r.key, r); });
+
+  const evidence = [];
+  prevSnap.rawLines.forEach(r => {
+    if (r.sku !== sku || !r.orderNo || !r.key) return;
+    if (r.status !== '新增' && r.status !== '異動') return;
+    const latestRow = latestByKey.get(r.key);
+    if (!latestRow || !String(latestRow.status||'').includes('刪除')) return; // 只看真的明確被刪除的
+    const base = baseOrderNo(r.orderNo);
+    const siblings = (latestByBase.get(base) || []).filter(s => s.orderNo !== r.orderNo);
+    if (siblings.length){
+      evidence.push({
+        deletedOrderNo: r.orderNo,
+        deletedQty: r.qty,
+        siblings: siblings.map(s => ({ orderNo: s.orderNo, status: s.status, sku: s.sku, qty: s.qty }))
+      });
+    }
+  });
+  return evidence;
+}
+
+// 掃描所有歷史相鄰快照的比對，找出還沒被記錄/忽略處理的「減少」品項（跟 render() 裡的邏輯共用）
+function getUnresolvedNegativeItems(){
+  const negativeBySku = {};
+  for (let i = 1; i < snapshots.length; i++){
+    const pPrev = snapshots[i-1], pLatest = snapshots[i];
+    const recon = reconcileDelta(pPrev, pLatest, pLatest.shipTo);
+    Object.entries(recon.delta).forEach(([sku, d]) => {
+      if (d < 0 && isBoxSku(sku) && !dismissedAlerts[alertKey(pPrev, pLatest, sku)]){
+        if (!negativeBySku[sku]) negativeBySku[sku] = { sku, name: recon.names[sku] || '', d: 0, pairs: [], splitReissueEvidence: [] };
+        negativeBySku[sku].d += d;
+        negativeBySku[sku].pairs.push({ prevUploadedAt: pPrev.uploadedAt, latestUploadedAt: pLatest.uploadedAt });
+        const evidence = detectSplitReissueEvidence(pPrev, pLatest, sku);
+        if (evidence.length) negativeBySku[sku].splitReissueEvidence.push(...evidence);
+      }
+    });
+  }
+  return Object.values(negativeBySku).filter(v => v.d < 0).sort((a,b) => a.sku.localeCompare(b.sku));
+}
+
+// ---------- 訂單內容異動偵測 ----------
+// 目的：抓「同一張訂單編號，內容（品項/數量）跟上一次看到的不一樣」——通常是廠商事後偷改訂單、沒有另外通知，
+// 跟「品項減少」的紅框警示不同：這裡是逐張訂單比對內容組成，不是看SKU總量的淨變化，
+// 就算兩張訂單剛好互相抵銷讓SKU總量沒變化，這裡還是抓得到。
+function orderChangeKey(prevSnap, latestSnap, orderNo){
+  return `${prevSnap.uploadedAt}|${latestSnap.uploadedAt}|${orderNo}`;
+}
+
+// 訂單有時候會因為「一箱裝不下，拆成好幾箱出貨」，衍生出結尾多一個英文字母的新訂單號
+// （例如 #20260903082232626 拆成 #20260903082232626 和 #20260903082232626A），
+// 拆單前後品項總數不會變，只是分散到不同訂單號底下——這種情況要當成「同一張訂單」看待，
+// 不然逐張訂單比對時，會誤判成「這張訂單品項減少了」，其實只是搬到旁邊那張去了
+function baseOrderNo(orderNo){
+  return String(orderNo || '').replace(/[A-Za-z]+$/, '');
+}
+
+function diffOrderContent(prevSnap, latestSnap){
+  if (!prevSnap.rawLines || !latestSnap.rawLines) return [];
+  // 這裡用的「算入」規則，跟 reconcileDelta 那種「只有新增/異動算數」不一樣：結案也要算數，
+  // 只有明確「刪除」才不算——因為這裡要偵測的是「訂單內容有沒有被偷改」，結案代表這批貨
+  // 是真的存在、真的出貨了，不是被取消，如果只算新增/異動，一筆明細正常結案時會被排除，
+  // 讓總數看起來「減少」，其實只是走完流程而已，不是內容被改
+  const isCounted = r => r.status === '新增' || r.status === '異動' || r.status === '結案';
+
+  const prevByOrder = new Map();
+  prevSnap.rawLines.forEach(r => {
+    if (!r.orderNo || !isBoxSku(r.sku) || !isCounted(r)) return;
+    const base = baseOrderNo(r.orderNo);
+    if (!prevByOrder.has(base)) prevByOrder.set(base, []);
+    prevByOrder.get(base).push(r);
+  });
+  const latestByOrder = new Map();
+  latestSnap.rawLines.forEach(r => {
+    if (!r.orderNo || !isBoxSku(r.sku) || !isCounted(r)) return;
+    const base = baseOrderNo(r.orderNo);
+    if (!latestByOrder.has(base)) latestByOrder.set(base, []);
+    latestByOrder.get(base).push(r);
+  });
+
+  const results = [];
+  const allOrderNos = new Set([...prevByOrder.keys(), ...latestByOrder.keys()]);
+  allOrderNos.forEach(orderNo => {
+    const prevLines = prevByOrder.get(orderNo) || [];
+    const latestLines = latestByOrder.get(orderNo) || [];
+    // 兩邊都要有「還活著」的明細才比對內容——只有一邊有，屬於全新訂單或整張取消，是既有邏輯的範圍，不是這裡要抓的「內容異動」
+    if (!prevLines.length || !latestLines.length) return;
+
+    const prevMap = {}, prevNames = {};
+    prevLines.forEach(r => { prevMap[r.sku] = (prevMap[r.sku]||0) + r.qty; prevNames[r.sku] = r.name; });
+    const latestMap = {}, latestNames = {};
+    latestLines.forEach(r => { latestMap[r.sku] = (latestMap[r.sku]||0) + r.qty; latestNames[r.sku] = r.name; });
+
+    const allSkusInOrder = new Set([...Object.keys(prevMap), ...Object.keys(latestMap)]);
+    const skuDiffs = [];
+    allSkusInOrder.forEach(sku => {
+      const p = prevMap[sku] || 0, l = latestMap[sku] || 0;
+      if (p !== l){
+        skuDiffs.push({ sku, name: latestNames[sku] || prevNames[sku] || '', prevQty: p, latestQty: l });
+      }
+    });
+    if (!skuDiffs.length) return;
+
+    const prevStatus = prevLines[0] && prevLines[0].status;
+    const latestStatus = latestLines[0] && latestLines[0].status;
+    const prevShipDate = prevLines[0] && prevLines[0].shipDate;
+    const latestShipDate = latestLines[0] && latestLines[0].shipDate;
+    skuDiffs.sort((a,b) => a.sku.localeCompare(b.sku));
+    results.push({
+      orderNo, skuDiffs,
+      prevStatus, latestStatus,
+      prevShipDate, latestShipDate,
+      prevUploadedAt: prevSnap.uploadedAt, latestUploadedAt: latestSnap.uploadedAt,
+      prevSnapDisp: snapDisp(prevSnap), latestSnapDisp: snapDisp(latestSnap)
+    });
+  });
+  return results;
+}
+
+// 只比對「這次上傳」跟「上一次上傳」這一組——訂單內容被改是檔期間天天都在發生的正常現象，
+// 不像品項減少那樣是偶發要處理的事件，如果比照品項減少掃描全部歷史，會把早就翻篇的舊異動也一起挖出來，
+// 反而太多太雜。只看最新一組，明天上傳新的之後，這組自然就會被換掉，不需要處理歷史包袱。
+function getUnresolvedOrderChanges(){
+  if (snapshots.length < 2) return [];
+  const pPrev = snapshots[snapshots.length - 2];
+  const pLatest = snapshots[snapshots.length - 1];
+  const changes = diffOrderContent(pPrev, pLatest)
+    .filter(c => !dismissedOrderChanges[orderChangeKey(pPrev, pLatest, c.orderNo)]);
+  // 依出廠日期排序（沒有出廠日的排最後），方便對照哪些批次快要出貨；同一天再依訂單編號排
+  return changes.sort((a,b) => {
+    const da = a.latestShipDate || '9999-99-99', db = b.latestShipDate || '9999-99-99';
+    return da.localeCompare(db) || a.orderNo.localeCompare(b.orderNo);
+  });
+}
+
+async function dismissOrderChange(prevUploadedAt, latestUploadedAt, orderNo){
+  dismissedOrderChanges[`${prevUploadedAt}|${latestUploadedAt}|${orderNo}`] = true;
+  await saveDismissedOrderChanges();
+  render();
+}
+
+// ---------- 訂單消失警示（沒有經過結案/刪除就從總表完全消失） ----------
+// 背景：對方系統有個「批次確認」按鈕，只有按過確認的訂單，之後若被取消才會留下「刪除」狀態；
+// 沒按確認的訂單如果被取消，是直接硬刪除，不會留下任何刪除或結案的痕跡，直接憑空消失——
+// 這在資料上跟「正常出貨完成」長得一模一樣（總表裡都是找不到），本來無法分辨。
+// 現在使用者已經改成連「結案」狀態也一併下載，就能用「上一次還活著、這一次完全消失、
+// 又從未出現過結案或刪除」當作可疑訊號：正常出貨至少會先看到一次「結案」才消失，
+// 這種訊號完全跳過那一步，直接憑空不見，很可能是沒按確認就被直接取消。
+// 這屬於偶發但需要人工核實的事件，比照「品項減少」紅框：持續顯示、掃描全部歷史，不會自動翻篇消失。
+function detectVanishedOrders(prevSnap, latestSnap){
+  if (!prevSnap.rawLines || !latestSnap.rawLines) return [];
+  const prevActiveOrders = new Map();
+  prevSnap.rawLines.forEach(r => {
+    if (!r.orderNo || !isBoxSku(r.sku)) return;
+    if (r.status === '新增' || r.status === '異動' || r.status === '客戶確認中'){
+      const base = baseOrderNo(r.orderNo);
+      if (!prevActiveOrders.has(base)) prevActiveOrders.set(base, []);
+      prevActiveOrders.get(base).push(r);
+    }
+  });
+  const latestOrderNos = new Set();
+  latestSnap.rawLines.forEach(r => {
+    if (r.orderNo && isBoxSku(r.sku)) latestOrderNos.add(baseOrderNo(r.orderNo));
+  });
+  const results = [];
+  prevActiveOrders.forEach((lines, orderNo) => {
+    if (latestOrderNos.has(orderNo)) return; // 不管出現什麼狀態（含結案/刪除，或拆單衍生出的新訂單號），都不是這裡要抓的
+    results.push({
+      orderNo,
+      items: lines.map(r => ({ sku: r.sku, name: r.name, qty: r.qty })),
+      prevStatus: lines[0].status,
+      prevShipDate: lines[0].shipDate,
+      prevUploadedAt: prevSnap.uploadedAt,
+      latestUploadedAt: latestSnap.uploadedAt,
+      prevSnapDisp: snapDisp(prevSnap),
+      latestSnapDisp: snapDisp(latestSnap)
+    });
+  });
+  return results;
+}
+
+function vanishedOrderKey(prevUploadedAt, latestUploadedAt, orderNo){
+  return `${prevUploadedAt}|${latestUploadedAt}|${orderNo}`;
+}
+
+// 掃描所有歷史相鄰快照，找出還沒被「登記」或「忽略」處理過的訂單消失事件
+function getUnresolvedVanishedOrders(){
+  const all = [];
+  for (let i = 1; i < snapshots.length; i++){
+    const pPrev = snapshots[i-1], pLatest = snapshots[i];
+    detectVanishedOrders(pPrev, pLatest).forEach(v => {
+      if (!dismissedVanishedOrders[vanishedOrderKey(v.prevUploadedAt, v.latestUploadedAt, v.orderNo)]) all.push(v);
+    });
+  }
+  return all.sort((a,b) => a.latestUploadedAt.localeCompare(b.latestUploadedAt) || a.orderNo.localeCompare(b.orderNo));
+}
+
+async function recordVanishedOrderStock(prevUploadedAt, latestUploadedAt, orderNo, items){
+  items.forEach(it => {
+    excessStock[it.sku] = (excessStock[it.sku] || 0) + it.qty;
+  });
+  await saveExcessStock();
+  for (const it of items){
+    await logStockRecord(it.sku, it.name, it.qty, `訂單消失警示-${orderNo}`);
+  }
+  dismissedVanishedOrders[vanishedOrderKey(prevUploadedAt, latestUploadedAt, orderNo)] = true;
+  await saveDismissedVanishedOrders();
+  render();
+}
+
+async function dismissVanishedOrderMulti(prevUploadedAt, latestUploadedAt, orderNo, items){
+  const summary = items.map(it => `${it.sku} x${it.qty}`).join('、');
+  const reason = await showIgnoreReasonModal(
+    `訂單 ${orderNo}（${summary}）疑似未經批次確認就被直接取消，忽略前想請您確認一下原因，方便之後回頭查：`
+  );
+  if (!reason) return;
+  items.forEach(it => {
+    ignoredLog.push({ date: todayStr(), sku: it.sku, name: it.name||'', qty: it.qty, reason: `[訂單消失-${orderNo}] ${reason}` });
+  });
+  await saveIgnoredLog();
+  dismissedVanishedOrders[vanishedOrderKey(prevUploadedAt, latestUploadedAt, orderNo)] = true;
+  await saveDismissedVanishedOrders();
+  render();
+}
+
+// ---------- toggle order lookup card ----------
+document.getElementById('toggle-production-btn').addEventListener('click', () => {
+  const wrap = document.getElementById('production-body-wrap');
+  const btn = document.getElementById('toggle-production-btn');
+  const showing = wrap.style.display !== 'none';
+  wrap.style.display = showing ? 'none' : '';
+  btn.textContent = showing ? '顯示訂單查詢' : '隱藏訂單查詢';
+});
+
+document.getElementById('manual-excess-btn').addEventListener('click', async () => {
+  const skuInput = document.getElementById('manual-excess-sku');
+  const qtyInput = document.getElementById('manual-excess-qty');
+  const sku = skuInput.value.trim().toUpperCase();
+  const qty = parseInt(qtyInput.value, 10);
+  const msgEl = document.getElementById('production-msg');
+  if (!sku){
+    msgEl.className = 'msg show err';
+    msgEl.textContent = '請填寫商品編號';
+    return;
+  }
+  if (isNaN(qty) || qty <= 0){
+    msgEl.className = 'msg show err';
+    msgEl.textContent = '請填寫大於0的數量';
+    return;
+  }
+  excessStock[sku] = (excessStock[sku] || 0) + qty;
+  const saved = await saveExcessStock();
+  await logStockRecord(sku, '', qty, '手動單筆登記');
+  msgEl.className = 'msg show ' + (saved?'ok':'err');
+  msgEl.textContent = saved ? `已登記 ${sku} 剩餘庫存 ${qty}（目前累計 ${excessStock[sku]}）` : '登記失敗，請稍後再試';
+  skuInput.value = '';
+  qtyInput.value = '';
+  render();
+});
+
+// 批次登記剩餘庫存：一行一筆「商品編號 數量」，空白/Tab/逗號都能當分隔，方便直接從Excel複製兩欄貼上
+document.getElementById('manual-excess-bulk-btn').addEventListener('click', async () => {
+  const textarea = document.getElementById('manual-excess-bulk');
+  const msgEl = document.getElementById('production-msg');
+  const lines = String(textarea.value||'').split(/\r?\n/).map(l => l.trim()).filter(l => l.length);
+
+  if (!lines.length){
+    msgEl.className = 'msg show err';
+    msgEl.textContent = '請至少輸入一行「商品編號 數量」';
+    return;
+  }
+
+  const applied = [];
+  const errors = [];
+  for (let i = 0; i < lines.length; i++){
+    const line = lines[i];
+    const parts = line.split(/[\s,，]+/).filter(p => p.length);
+    if (parts.length < 2){ errors.push(`第${i+1}行「${line}」：看不出編號跟數量，已略過`); continue; }
+    const sku = parts[0].trim().toUpperCase();
+    const qty = parseInt(parts[1], 10);
+    if (!sku || isNaN(qty) || qty <= 0){ errors.push(`第${i+1}行「${line}」：編號或數量看不懂（需為大於0的數字），已略過`); continue; }
+    excessStock[sku] = (excessStock[sku] || 0) + qty;
+    await logStockRecord(sku, '', qty, '手動批次登記');
+    applied.push(`${sku} +${qty}`);
+  }
+
+  let saved = true;
+  if (applied.length) saved = await saveExcessStock();
+  if (applied.length){
+    textarea.value = '';
+    render();
+  }
+
+  const parts = [];
+  if (applied.length) parts.push(`已登記 ${applied.length} 筆：${applied.join('、')}`);
+  if (errors.length) parts.push(errors.join('\n'));
+  if (applied.length && !saved) parts.push('（注意：寫入儲存失敗，重新整理頁面可能會遺失，建議再試一次）');
+  msgEl.textContent = parts.join('\n') || '沒有任何一行是有效的登記，請確認格式';
+  msgEl.className = 'msg show ' + (!applied.length ? 'err' : (errors.length || !saved ? 'warn' : 'ok'));
+});
+
+// ---------- 訂單查詢 ----------
+function normalizeOrderNo(s){
+  return String(s || '').replace(/^#/, '').trim();
+}
+
+function findOrderLines(snap, orderNoQuery){
+  if (!snap || !snap.rawLines) return [];
+  const q = normalizeOrderNo(orderNoQuery);
+  return snap.rawLines.filter(r => r.orderNo && normalizeOrderNo(r.orderNo).includes(q));
+}
+
+function runOrderSearch(){
+  const input = document.getElementById('order-search-input');
+  const query = input.value.trim();
+  const resultEl = document.getElementById('order-search-result');
+  if (!query){
+    resultEl.innerHTML = '';
+    return;
+  }
+  if (!snapshots.length){
+    resultEl.innerHTML = '<div class="hint">尚未有任何上傳紀錄可查詢。</div>';
+    return;
+  }
+  const latest = snapshots[snapshots.length - 1];
+  const prev = snapshots.length >= 2 ? snapshots[snapshots.length - 2] : null;
+  const latestLines = findOrderLines(latest, query);
+  const prevLines = prev ? findOrderLines(prev, query) : [];
+
+  if (!latestLines.length && !prevLines.length){
+    resultEl.innerHTML = `<div class="hint">在最新一筆快照（${escapeHtml(snapDisp(latest))}）裡找不到符合「${escapeHtml(query)}」的訂單，請確認編號是否正確，或這張訂單可能已經完全不在下載範圍內。</div>`;
+    return;
+  }
+
+  // 依 key 建立前後對照，標示新增/移除/數量變動
+  const prevByKey = new Map(prevLines.map(r => [r.key, r]));
+  const latestByKey = new Map(latestLines.map(r => [r.key, r]));
+  const allKeys = new Set([...prevByKey.keys(), ...latestByKey.keys()]);
+
+  let rowsHtml = '';
+  allKeys.forEach(key => {
+    const l = latestByKey.get(key);
+    const p = prevByKey.get(key);
+    let tag = '';
+    if (l && !p) tag = '<span style="color:var(--green-pos);font-weight:700;">新增</span>';
+    else if (!l && p) tag = '<span style="color:var(--rust-neg);font-weight:700;">已移除</span>';
+    else if (l && p && l.qty !== p.qty) tag = `<span style="color:var(--gold);font-weight:700;">數量變動 ${p.qty}→${l.qty}</span>`;
+    else if (l && p && l.status !== p.status) tag = `<span style="color:var(--ink-soft);">狀態：${p.status}→${l.status}</span>`;
+    else tag = '<span style="color:var(--ink-soft);">未變動</span>';
+
+    const row = l || p; // 目前存在的優先顯示，都不存在理論上不會發生
+    const currentQty = l ? l.qty : 0;
+    rowsHtml += `
+      <tr>
+        <td class="sku">${escapeHtml(row.sku)}</td>
+        <td class="pname" title="${escapeHtml(row.name)}">${escapeHtml(row.name)}</td>
+        <td class="num">${l ? l.qty : '—'}</td>
+        <td>${l ? l.status : '（已不在最新資料中）'}</td>
+        <td>${tag}</td>
+        <td class="num"><input type="text" inputmode="numeric" class="order-prepared-input" data-sku="${escapeHtml(row.sku)}" value="${currentQty}" style="width:70px;text-align:right;border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-family:inherit;font-size:13px;" ${l?'':'disabled'}></td>
+      </tr>
+    `;
+  });
+
+  resultEl.innerHTML = `
+    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;">
+      查詢範圍：最新一筆（${escapeHtml(snapDisp(latest))}）${prev ? `，並跟上一筆（${escapeHtml(snapDisp(prev))}）比對異動` : ''}
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>商品編號</th><th>商品名稱</th><th class="num">目前數量</th><th>訂單狀態</th><th>異動狀況</th><th class="num">已準備</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <button class="btn-danger-ghost" style="padding:9px 16px;font-size:13.5px;" id="order-delete-all-btn">整筆刪除（訂單取消，登記為剩餘庫存）</button>
+      <span style="font-size:12px;color:var(--ink-soft);">會依上面「已準備」欄位的數字，登記為各品項的剩餘庫存</span>
+    </div>
+  `;
+
+  document.getElementById('order-delete-all-btn').addEventListener('click', async () => {
+    const inputs = resultEl.querySelectorAll('.order-prepared-input:not([disabled])');
+    const items = Array.from(inputs).map(inp => ({
+      sku: inp.dataset.sku,
+      qty: parseInt(inp.value, 10) || 0
+    })).filter(it => it.qty > 0);
+
+    if (!items.length){
+      alert('沒有任何品項的「已準備」數量大於0，沒有東西可以登記。');
+      return;
+    }
+    const summary = items.map(it => `${it.sku}：${it.qty}`).join('\n');
+    const confirmed = confirm(
+      `確定要把這張訂單整筆刪除，並把以下數量登記為剩餘庫存嗎？此動作無法復原：\n\n${summary}`
+    );
+    if (!confirmed) return;
+
+    items.forEach(it => {
+      excessStock[it.sku] = (excessStock[it.sku] || 0) + it.qty;
+    });
+    const saved = await saveExcessStock();
+    const msgEl = document.getElementById('production-msg');
+    msgEl.className = 'msg show ' + (saved?'ok':'err');
+    msgEl.textContent = saved ? `已將訂單「${query}」的品項登記為剩餘庫存` : '登記失敗，請稍後再試';
+    document.getElementById('order-search-input').value = '';
+    resultEl.innerHTML = '';
+    render();
+  });
+}
+
+document.getElementById('order-search-btn').addEventListener('click', runOrderSearch);
+document.getElementById('order-search-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') runOrderSearch();
+});
+
+// ---------- 全品項健康檢查 ----------
+document.getElementById('toggle-healthcheck-btn').addEventListener('click', () => {
+  const wrap = document.getElementById('healthcheck-body-wrap');
+  const btn = document.getElementById('toggle-healthcheck-btn');
+  const showing = wrap.style.display !== 'none';
+  wrap.style.display = showing ? 'none' : '';
+  btn.textContent = showing ? '顯示健康檢查' : '隱藏健康檢查';
+});
+
+function readXlsxRows(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, {type:'array'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        resolve(XLSX.utils.sheet_to_json(ws, {header:1, defval:null}));
+      } catch(err){ reject(err); }
+    };
+    reader.onerror = () => reject(new Error('讀取檔案失敗'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+document.getElementById('healthcheck-run-btn').addEventListener('click', async () => {
+  const resultEl = document.getElementById('healthcheck-result');
+  const files = Array.from(document.getElementById('healthcheck-input').files || []);
+  if (!files.length){
+    resultEl.innerHTML = '<div class="hint">請先選擇至少一份已匯出過的 SG採購單檔案。</div>';
+    return;
+  }
+  if (snapshots.length < 1){
+    resultEl.innerHTML = '<div class="hint">尚未有任何上傳紀錄，無法比對。</div>';
+    return;
+  }
+  resultEl.innerHTML = '<div class="hint">比對中...</div>';
+
+  // 加總所有選取檔案裡的採購數量
+  const exportedTotals = {}; // sku -> qty
+  const exportedNames = {};
+  let skippedFiles = [];
+  for (const file of files){
+    try {
+      const rows = await readXlsxRows(file);
+      let headerIdx = -1, idxSku=0, idxName=1, idxQty=2;
+      for (let i=0;i<Math.min(rows.length,5);i++){
+        const row = (rows[i]||[]).map(c=>c==null?'':String(c).trim());
+        const skuCol = row.indexOf('庫存SKU');
+        const nameCol = row.indexOf('庫存貨品名稱');
+        const qtyCol = row.indexOf('數量');
+        if (skuCol!==-1 && qtyCol!==-1){ headerIdx=i; idxSku=skuCol; idxName=nameCol; idxQty=qtyCol; break; }
+      }
+      if (headerIdx===-1){ skippedFiles.push(file.name); continue; }
+      for (let r=headerIdx+1;r<rows.length;r++){
+        const row = rows[r];
+        if (!row || row.every(c=>c===null||c==='')) continue;
+        const sku = row[idxSku];
+        if (!sku) continue;
+        const skuStr = String(sku).trim();
+        const qty = Number(row[idxQty])||0;
+        exportedTotals[skuStr] = (exportedTotals[skuStr]||0) + qty;
+        if (idxName!==-1 && row[idxName]) exportedNames[skuStr] = String(row[idxName]).trim();
+      }
+    } catch(err){
+      skippedFiles.push(file.name + '（讀取失敗）');
+    }
+  }
+
+  // 算出「基準日到現在」累計淨增加
+  const baseline = snapshots.find(s => s.isBaseline) || snapshots[0];
+  const latest = snapshots[snapshots.length - 1];
+  const baseRecon = reconcileDelta(baseline, latest, latest.shipTo);
+
+  const allSkus = new Set([...Object.keys(baseRecon.delta), ...Object.keys(exportedTotals), ...Object.keys(stockUsedLog)]);
+  const rows = [];
+  allSkus.forEach(sku => {
+    const cumulative = Math.max(0, baseRecon.delta[sku] || 0); // 只看累計「增加」的部分
+    const exported = exportedTotals[sku] || 0;
+    const stockUsed = stockUsedLog[sku] || 0; // 曾經用庫存直接抵掉、沒有另外開單製作的量：這部分不是缺口，是已經被多做的庫存補上了
+    if (cumulative === 0 && exported === 0 && stockUsed === 0) return;
+    const gap = cumulative - exported - stockUsed;
+    rows.push({
+      sku,
+      name: baseRecon.names[sku] || exportedNames[sku] || '',
+      cumulative, exported, stockUsed, gap
+    });
+  });
+  rows.sort((a,b) => b.gap - a.gap);
+
+  const gapRows = rows.filter(r => r.gap > 0);
+  const totalGap = gapRows.reduce((a,r)=>a+r.gap, 0);
+  const totalStockUsed = Object.values(stockUsedLog).reduce((a,v)=>a+v,0);
+
+  let html = '';
+  if (skippedFiles.length){
+    html += `<div class="msg show err" style="margin-bottom:10px;">以下檔案無法辨識為 SG採購單格式，已略過：${skippedFiles.map(escapeHtml).join('、')}</div>`;
+  }
+  html += `
+    <div class="summary-grid" style="margin-bottom:14px;">
+      <div class="stat">
+        <div class="label">基準日（${escapeHtml(snapDisp(baseline))}）到現在累計淨增加</div>
+        <div class="value">${Object.values(baseRecon.delta).reduce((a,v)=>a+Math.max(0,v),0)}</div>
+      </div>
+      <div class="stat">
+        <div class="label">所有檔案加總的採購量</div>
+        <div class="value">${Object.values(exportedTotals).reduce((a,v)=>a+v,0)}</div>
+      </div>
+      <div class="stat">
+        <div class="label">曾用剩餘庫存直接抵掉、沒另外開單的量</div>
+        <div class="value">${totalStockUsed}</div>
+      </div>
+      <div class="stat">
+        <div class="label">總缺口（漏掉、需要補登）</div>
+        <div class="value ${totalGap>0?'neg':''}">${totalGap}</div>
+      </div>
+    </div>
+  `;
+
+  if (!gapRows.length){
+    html += '<div class="msg show ok">沒有發現缺口，目前累計增加跟已匯出的採購單完全對得上。</div>';
+  } else {
+    html += `
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>商品編號</th><th>商品名稱</th><th class="num">累計淨增加</th><th class="num">已匯出採購量</th><th class="num">庫存已抵</th><th class="num">缺口</th></tr></thead>
+          <tbody>
+            ${gapRows.map(r => `<tr>
+              <td class="sku">${escapeHtml(r.sku)}</td>
+              <td class="pname" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</td>
+              <td class="num">${r.cumulative}</td>
+              <td class="num">${r.exported}</td>
+              <td class="num">${r.stockUsed}</td>
+              <td class="num delta neg">${r.gap}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      <button class="btn-primary" style="margin-top:14px;" id="healthcheck-export-btn">匯出缺口補登採購單</button>
+    `;
+  }
+  resultEl.innerHTML = html;
+
+  if (gapRows.length){
+    document.getElementById('healthcheck-export-btn').addEventListener('click', () => {
+      const exportRows = [['庫存SKU','庫存貨品名稱','數量','成本','供應商SKU','稅款']];
+      const sortedGapRows = [...gapRows].sort((a,b) => String(a.sku).localeCompare(String(b.sku), undefined, {numeric:true}));
+      sortedGapRows.forEach(r => exportRows.push([r.sku, r.name, r.gap, '0', '', '']));
+      const ws = XLSX.utils.aoa_to_sheet(exportRows);
+      ws['!cols'] = [{wch:12},{wch:45},{wch:8},{wch:8},{wch:12},{wch:8}];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '工作表2');
+      XLSX.writeFile(wb, `${todayStr()}健康檢查缺口補登-SG採購單.xlsx`);
+    });
+  }
+});
+
+// ---------- 採購單彙整（供應給製作組） ----------
+document.getElementById('toggle-po-summary-btn').addEventListener('click', () => {
+  const wrap = document.getElementById('po-summary-body-wrap');
+  const btn = document.getElementById('toggle-po-summary-btn');
+  const showing = wrap.style.display !== 'none';
+  wrap.style.display = showing ? 'none' : '';
+  btn.textContent = showing ? '顯示採購單彙整' : '隱藏採購單彙整';
+});
+
+let poSummaryFile = null;
+document.getElementById('po-summary-file').addEventListener('change', (e) => {
+  poSummaryFile = e.target.files[0] || null;
+  document.getElementById('po-summary-parse-btn').disabled = !poSummaryFile;
+});
+
+document.getElementById('po-summary-parse-btn').addEventListener('click', async () => {
+  const msgEl = document.getElementById('po-summary-msg');
+  const resultEl = document.getElementById('po-summary-result');
+  if (!poSummaryFile) return;
+  msgEl.className = 'msg show';
+  msgEl.textContent = '解析中...';
+  resultEl.innerHTML = '';
+  try {
+    const aoa = await readXlsxRows(poSummaryFile);
+    if (!aoa.length) throw new Error('檔案是空的');
+    const headers = aoa[0].map(h => String(h||'').trim());
+    const idxSku = headers.indexOf('庫存SKU');
+    const idxName = headers.indexOf('庫存貨品名稱');
+    const idxQty = headers.indexOf('數量');
+    const idxReceived = headers.indexOf('已收貨');
+    const idxPo = headers.indexOf('採購單編號');
+    const idxDate = headers.indexOf('採購日期');
+    if (idxSku === -1 || idxQty === -1 || idxReceived === -1){
+      throw new Error('檔案裡找不到「庫存SKU」「數量」「已收貨」欄位，請確認是採購單彙出檔');
+    }
+
+    const outstanding = {}; // sku -> 加總還缺的數量
+    const nameBySku = {}; // sku -> 商品中文名稱（取第一次看到的值）
+    const detailBySku = {}; // sku -> [{po, date, remain, sortKey}]
+    let rowCount = 0, skippedCount = 0;
+    let currentPo = null, currentDate = null; // 每張採購單只有第一列有採購單編號/日期，下面的品項列要往下繼承
+    for (let i = 1; i < aoa.length; i++){
+      const row = aoa[i];
+      if (idxPo !== -1 && row[idxPo]){ currentPo = String(row[idxPo]).trim(); }
+      if (idxDate !== -1 && row[idxDate]){ currentDate = row[idxDate]; }
+      const sku = row[idxSku] ? String(row[idxSku]).trim().toUpperCase() : '';
+      if (!sku) continue; // 表頭列（只有採購單編號/日期，沒有品項資訊），不是品項列
+      rowCount++;
+      if (idxName !== -1 && row[idxName] && !nameBySku[sku]) nameBySku[sku] = String(row[idxName]).trim();
+      const qty = Number(row[idxQty]);
+      const received = Number(row[idxReceived]);
+      if (isNaN(qty) || isNaN(received)){ skippedCount++; continue; }
+      const remain = qty - received;
+      if (remain > 0){
+        outstanding[sku] = (outstanding[sku] || 0) + remain;
+        if (!detailBySku[sku]) detailBySku[sku] = [];
+        // 排序依據優先用「採購日期」；日期缺的話退回用採購單編號裡的數字（例如 PO-0571 → 571），
+        // 兩個都拿不到就放最後——先進先出，數字/日期小的排前面，方便依序回SG核銷
+        let sortKey = '9999-99-99';
+        if (currentDate){
+          const d = (currentDate instanceof Date) ? currentDate : new Date(currentDate);
+          if (!isNaN(d)) sortKey = d.toISOString().slice(0,10);
+        } else if (currentPo){
+          const m = currentPo.match(/(\d+)/);
+          if (m) sortKey = 'N' + m[1].padStart(10,'0');
+        }
+        detailBySku[sku].push({ po: currentPo || '（無採購單編號）', date: currentDate ? String(currentDate).slice(0,10) : null, remain, sortKey });
+      }
+    }
+    Object.values(detailBySku).forEach(list => list.sort((a,b) => a.sortKey.localeCompare(b.sortKey)));
+
+    const skuList = Object.entries(outstanding).sort((a,b) => a[0].localeCompare(b[0]));
+    if (!skuList.length){
+      msgEl.className = 'msg show ok';
+      msgEl.textContent = `解析完成，共 ${rowCount} 筆品項列，全部都已經收貨完成，沒有還缺的品項。`;
+      return;
+    }
+
+    msgEl.className = 'msg show ' + (skippedCount ? 'warn' : 'ok');
+    msgEl.textContent = `解析完成，共 ${rowCount} 筆品項列，彙整出 ${skuList.length} 個還缺貨的SKU`
+      + (skippedCount ? `（有 ${skippedCount} 筆數量欄位看不懂，已略過）` : '');
+
+    resultEl.innerHTML = `
+      <div class="hint" style="margin:10px 0;">點任一列可以展開，看這個SKU還缺的量分別散布在哪些採購單編號裡，依日期（或採購單編號）由小到大排序，方便依序回SG系統核銷。</div>
+      <div class="table-scroll">
+        <table class="warehouse-table" id="po-summary-table">
+          <thead><tr><th style="width:24px;"></th><th>商品SKU</th><th>品名</th><th class="num">還缺數量</th></tr></thead>
+          <tbody>
+            ${skuList.map(([sku, qty], i) => `
+              <tr class="po-summary-row" data-sku-idx="${i}" style="cursor:pointer;">
+                <td class="po-summary-caret">▸</td>
+                <td class="sku">${escapeHtml(sku)}</td>
+                <td class="pname" title="${escapeHtml(nameBySku[sku]||'')}">${escapeHtml(nameBySku[sku]||'')}</td>
+                <td class="num">${qty}</td>
+              </tr>
+              <tr class="po-summary-detail-row" id="po-summary-detail-${i}" style="display:none;">
+                <td></td>
+                <td colspan="3" style="padding:0;">
+                  <table style="width:100%;background:var(--cream);">
+                    <thead><tr><th style="font-size:11px;">採購單編號</th><th style="font-size:11px;">採購日期</th><th class="num" style="font-size:11px;">還缺</th><th class="num" style="font-size:11px;">累計</th></tr></thead>
+                    <tbody>
+                      ${(() => {
+                        let cum = 0;
+                        return (detailBySku[sku]||[]).map(d => {
+                          cum += d.remain;
+                          return `<tr><td>${escapeHtml(d.po)}</td><td>${escapeHtml(d.date||'（無日期）')}</td><td class="num">${d.remain}</td><td class="num">${cum}</td></tr>`;
+                        }).join('');
+                      })()}
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+      <button class="btn-primary" style="margin-top:14px;" id="po-summary-print-btn">列印／另存PDF（A4橫印）</button>
+    `;
+
+    resultEl.querySelectorAll('.po-summary-row').forEach(tr => {
+      tr.addEventListener('click', () => {
+        const i = tr.getAttribute('data-sku-idx');
+        const detailRow = document.getElementById(`po-summary-detail-${i}`);
+        const caret = tr.querySelector('.po-summary-caret');
+        const showing = detailRow.style.display !== 'none';
+        detailRow.style.display = showing ? 'none' : '';
+        caret.textContent = showing ? '▸' : '▾';
+      });
+    });
+
+    document.getElementById('po-summary-print-btn').addEventListener('click', () => {
+      // 一個SKU一列（不是一張採購單一列）：採購單編號直接堆疊在同一格裡，
+      // 應完成數量放這個SKU的總數，最後統一附一行總計。
+      // 組內依先進先出（採購日期/編號）排序，方便照順序回SG系統核銷。
+      const rowsHtml = [];
+      let grandTotal = 0;
+      skuList.forEach(([sku, subtotal]) => {
+        const lines = detailBySku[sku] || [];
+        grandTotal += subtotal;
+        const poCellHtml = lines.map(d => `<div class="po-line">${escapeHtml(d.po)}</div>`).join('');
+        rowsHtml.push(`
+          <tr>
+            <td class="po-sku">${escapeHtml(sku)}</td>
+            <td class="po-name">${escapeHtml(nameBySku[sku]||'')}</td>
+            <td class="po-poNo">${poCellHtml}</td>
+            <td class="po-qty">${subtotal}</td>
+            <td class="po-fill">&nbsp;</td>
+          </tr>
+        `);
+      });
+      rowsHtml.push(`
+        <tr class="po-grandtotal-row">
+          <td colspan="3">總計</td>
+          <td class="po-qty">${grandTotal}</td>
+          <td></td>
+        </tr>
+      `);
+      const flatRowCount = Object.values(detailBySku).reduce((a,list)=>a+list.length, 0);
+      document.getElementById('po-print-meta').textContent = `產出日期：${todayStr()}　共 ${skuList.length} 個SKU、${flatRowCount} 筆採購單、總計 ${grandTotal} 個`;
+      document.getElementById('po-print-tbody').innerHTML = rowsHtml.join('');
+      window.print();
+    });
+  } catch(err){
+    msgEl.className = 'msg show err';
+    msgEl.textContent = '解析失敗：' + err.message;
+  }
+});
+
+// ---------- Upload flow ----------
+uploadBtn.addEventListener('click', async () => {
+  if (!pendingFile) return;
+  const date = dateInput.value;
+  if (!date){ showMsg('請選擇抓貨日期', 'err'); return; }
+
+  const labelInput = document.getElementById('snap-label');
+  let label = labelInput.value.trim();
+
+  const sameDateSnaps = snapshots.filter(s => s.date === date);
+  const exactMatch = snapshots.findIndex(s => s.date === date && (s.label||'') === label);
+
+  let mode = 'new'; // 'new' | 'overwrite' | 'add'
+  let targetIdx = -1;
+
+  if (exactMatch !== -1){
+    // 完全同一天 + 同一個標籤（包括都留空）→ 明確詢問覆蓋或新增另一筆
+    const oldSnap = snapshots[exactMatch];
+    // 防呆：如果要被覆蓋掉的這筆，曾經被拿去匯出過SG採購單，覆蓋等於讓那次的比對基準點憑空消失，
+    // 之後的比對會找不到它、退回去跟更早的快照比，把「已經開過採購單的增加量」重複算成新的增加
+    // ——這是真實發生過的問題，所以覆蓋前要先講清楚，不能讓使用者在不知情的狀況下蓋掉
+    const usedInExports = Object.keys(exportedPairs).filter(pairKey => {
+      const [prevAt, latestAt] = pairKey.split('|');
+      return prevAt === oldSnap.uploadedAt || latestAt === oldSnap.uploadedAt;
+    });
+    const exportWarning = usedInExports.length
+      ? `\n\n⚠️ 注意：這筆快照曾經被用來匯出過SG採購單（${usedInExports.map(k => exportedPairs[k].exportedAt).join('、')}）。如果選「覆蓋這筆」，之後的比對會找不到這個基準點，可能會把已經請購過的增加量重複算成新的、重複開單。除非你很確定不需要再拿它當比對基準，否則建議選「新增為另一筆」，把兩筆都留著。`
+      : '';
+    const msg = (label
+      ? `${date}「${label}」已經有上傳過的快照了。\n\n選「覆蓋這筆」會取代原本的資料；選「新增為另一筆」會保留原本的，另外多存一筆（需要換個標籤區分）。`
+      : `${date} 已經有上傳過的快照了（今天共 ${sameDateSnaps.length} 筆）。\n\n選「覆蓋這筆」會取代最新那筆資料；選「新增為另一筆」會保留原本的，另外多存一筆（例如同一天早上、下午各抓一次）。`
+    ) + exportWarning;
+    const choice = await showDecisionModal(msg);
+    if (choice === 'cancel') return;
+    if (choice === 'overwrite'){
+      if (usedInExports.length && !confirm('再次確認：這筆快照曾經匯出過採購單，覆蓋後可能導致之後重複請購。真的要繼續覆蓋嗎？')){
+        return;
+      }
+      mode = 'overwrite';
+      targetIdx = exactMatch;
+    } else {
+      mode = 'add';
+      if (!label) label = nowTimeLabel(); // 自動用時間當標籤，避免又跟原本那筆撞在一起
+    }
+  }
+
+  const shipTo = shipToInput.value;
+  const windowDays = parseInt(windowDaysInput.value, 10);
+  if (!shipTo || !windowDays || windowDays < 1){
+    showMsg('請確認「抓未來幾天內」欄位有填正確的數字', 'err');
+    return;
+  }
+
+  // 防呆 1：抓天數跟上一次不一致（僅提醒確認，數字本身已經會自動校正，不會因此算錯）
+  const lastSnap = snapshots.length ? snapshots[snapshots.length - 1] : null;
+  if (lastSnap && lastSnap.windowDays && lastSnap.windowDays !== windowDays){
+    const ok = confirm(
+      `上一次上傳（${snapDisp(lastSnap)}）用的是「未來 ${lastSnap.windowDays} 天」，這次填的是「未來 ${windowDays} 天」，天數不一樣。\n\n` +
+      `工具會自動用新的天數重新校正比對，增加數仍然會是準確的，這只是想跟您確認「天數改變是您刻意調整的」，而不是打錯數字。\n\n` +
+      `確定要繼續用 ${windowDays} 天上傳嗎？`
+    );
+    if (!ok) return;
+  }
+
+  // 防呆 2：同一個檔名之前已經上傳過
+  const sameFilename = snapshots.find(s => s.filename === pendingFile.name);
+  if (sameFilename){
+    const ok = confirm(
+      `這個檔案「${pendingFile.name}」看起來已經在 ${snapDisp(sameFilename)} 上傳過了。\n\n` +
+      `如果是不小心選錯檔案（忘記換成今天新下載的檔案），請按「取消」重新選檔；如果確定就是要用這份檔案，按「確定」繼續。`
+    );
+    if (!ok) return;
+  }
+
+  // 防呆 3：抓貨日期比目前最新一筆還早（順序顛倒，可能是漏抓後補資料，也可能是打錯日期）
+  if (lastSnap && date < lastSnap.date && exactMatch === -1){
+    const ok = confirm(
+      `這次填的抓貨日期（${date}）比目前最新一筆紀錄（${snapDisp(lastSnap)}）還早。\n\n` +
+      `如果是要「補之前漏抓的資料」，請按「確定」繼續；如果是不小心打錯日期，請按「取消」重新確認。`
+    );
+    if (!ok) return;
+  }
+
+  // 防呆 4：還有「減少」警示沒被處理過，上傳前強制詢問，選「否」就不能繼續
+  const unresolvedNegatives = getUnresolvedNegativeItems();
+  if (unresolvedNegatives.length){
+    const summary = unresolvedNegatives.map(it => `${it.sku}（${it.name||''}）：${it.d}`).join('\n');
+    const choice = await showDecisionModal(
+      `還有 ${unresolvedNegatives.length} 個品項的「數量減少」還沒處理過：\n\n${summary}\n\n是否直接把這些數量登記為剩餘庫存？選「是」會直接登記並繼續上傳；選「否」就無法上傳，需要先到上方警示區處理（記錄或忽略）才能繼續。`,
+      { showAdd: false, title: '還有未處理的減少警示', overwriteLabel: '是，直接納入保留', cancelLabel: '否，我要先處理' }
+    );
+    if (choice !== 'overwrite') return; // 選「否」或關閉視窗，中止上傳
+    // 選「是」：把每個品項的減少量直接登記為庫存，並標記所有相關比對為已處理
+    unresolvedNegatives.forEach(it => {
+      excessStock[it.sku] = (excessStock[it.sku] || 0) + Math.abs(it.d);
+      it.pairs.forEach(p => {
+        dismissedAlerts[`${p.prevUploadedAt}|${p.latestUploadedAt}|${it.sku}`] = true;
+      });
+    });
+    await saveExcessStock();
+    await saveDismissedAlerts();
+  }
+
+  uploadBtn.disabled = true;
+  uploadBtn.textContent = '解析中...';
+  showMsg('', null);
+
+  try {
+    const parsed = await parseOrderFile(pendingFile, shipTo);
+
+    // 防呆 5：這次上傳的資料量（明細列數／訂單數）比上次少了很多，很可能是選錯檔期或檔案下載不完整。
+    // 這個情況原本完全沒有警示：找不到對應舊紀錄一律「安全不扣」，導致誤上傳一份幾乎空白的檔案時，
+    // 增加數看起來就是平淡的 0，不會有任何異常訊號，卻已經把這筆錯誤資料存成之後比對的基準。
+    if (lastSnap && lastSnap.rawLines && lastSnap.rawLines.length >= 20){
+      const prevLineCount = lastSnap.rawLines.length;
+      const prevOrderCount = lastSnap.orderCount || 0;
+      const thisLineCount = parsed.rawLines.length;
+      const thisOrderCount = parsed.orderCount || 0;
+      const lineDropRatio = prevLineCount ? thisLineCount / prevLineCount : 1;
+      const orderDropRatio = prevOrderCount ? thisOrderCount / prevOrderCount : 1;
+      if (lineDropRatio < 0.4 || orderDropRatio < 0.4){
+        const ok = confirm(
+          `這次上傳的資料量比上次少了很多，很可能是選錯檔期或檔案下載不完整：\n\n` +
+          `上次（${snapDisp(lastSnap)}）：${prevOrderCount} 筆訂單、${prevLineCount} 筆明細列\n` +
+          `這次：${thisOrderCount} 筆訂單、${thisLineCount} 筆明細列\n\n` +
+          `如果確定這份檔案沒有問題，按「確定」繼續上傳；如果懷疑選錯檔案，請按「取消」，回頭重新下載正確的總表再上傳。`
+        );
+        if (!ok) return; // 中止上傳，不會存成快照；finally 區塊會恢復按鈕狀態
+      }
+    }
+
+    const snap = {
+      date,
+      label,
+      uploadedAt: new Date().toISOString(),
+      filename: pendingFile.name,
+      isBaseline: snapshots.length === 0, // first upload ever auto becomes baseline
+      items: parsed.items,
+      rawLines: parsed.rawLines,
+      warehouseLines: parsed.warehouseLines,
+      lineCount: parsed.lineCount,
+      orderCount: parsed.orderCount,
+      windowDays, shipTo,
+      skippedOutOfWindow: parsed.skippedOutOfWindow,
+      skippedNoShipDate: parsed.skippedNoShipDate,
+      skippedStatus: parsed.skippedStatus,
+      excludedWarehouseQty: parsed.excludedWarehouseQty,
+      excludedWarehouseSkuCount: parsed.excludedWarehouseSkuCount,
+      excludedNonBoxQty: parsed.excludedNonBoxQty,
+      excludedNonBoxSkuCount: parsed.excludedNonBoxSkuCount,
+      formatType: parsed.formatType
+    };
+    if (mode === 'overwrite' && targetIdx !== -1){
+      snap.isBaseline = snapshots[targetIdx].isBaseline;
+      snapshots[targetIdx] = snap;
+    } else {
+      snapshots.push(snap);
+    }
+    snapshots.sort((a,b) => a.uploadedAt.localeCompare(b.uploadedAt));
+    const saved = await saveSnapshots();
+
+    let extra = '';
+    if (parsed.skippedStatus) extra += `，${parsed.skippedStatus} 筆因訂單狀態非新增/異動被排除`;
+    if (parsed.skippedOutOfWindow) extra += `，${parsed.skippedOutOfWindow} 筆因製作許可日超過上限被排除`;
+    if (parsed.skippedNoShipDate) extra += `，${parsed.skippedNoShipDate} 筆因缺少製作許可日/出廠日被排除`;
+    if (parsed.excludedWarehouseQty) extra += `，均茂免製作品項另排除 ${parsed.excludedWarehouseSkuCount} 種共 ${parsed.excludedWarehouseQty} 個`;
+    if (parsed.excludedNonBoxQty) extra += `，非A/B開頭料件另排除 ${parsed.excludedNonBoxSkuCount} 種共 ${parsed.excludedNonBoxQty} 個`;
+    if (!saved) extra += '（注意：資料儲存失敗，重新整理頁面可能會遺失這筆紀錄，建議先匯出 CSV 備份）';
+    const labelTxt = label ? `「${label}」` : '';
+    showMsg(`已上傳 ${date}${labelTxt}（製作許可日上限 ${shipTo}，未來 ${windowDays} 天）：共 ${parsed.orderCount} 筆訂單、${Object.keys(parsed.items).length} 種品項、${parsed.lineCount} 筆明細列${extra}`, saved ? 'ok' : 'err');
+    pendingFile = null;
+    fileInput.value = '';
+    dropLabel.textContent = '點擊選擇或拖曳檔案到此';
+    labelInput.value = '';
+    render();
+  } catch(err){
+    showMsg('解析失敗：' + err.message, 'err');
+  } finally {
+    uploadBtn.disabled = false;
+    uploadBtn.textContent = '上傳並比對';
+  }
+});
+
+// ---------- Snapshot list ----------
+async function setBaseline(uploadedAt){
+  snapshots.forEach(s => s.isBaseline = (s.uploadedAt === uploadedAt));
+  await saveSnapshots();
+  render();
+}
+
+async function deleteSnapshot(uploadedAt){
+  const snap = snapshots.find(s => s.uploadedAt === uploadedAt);
+  const displayName = snap ? (snap.label ? `${snap.date}「${snap.label}」` : snap.date) : '';
+
+  // 防呆：這筆快照如果曾經被拿去匯出過SG採購單（不管是當「上一次」還是「這一次」那一側），
+  // 一旦刪掉，之後的比對基準點就會找不到它、退回去跟更早的快照比較，導致「已經開過採購單的
+  // 增加量」被重新算成新的增加，變成重複請購——這是真實發生過的問題（2026-09-18下午的快照
+  // 被刪除後，2026-09-21匯出時退回去跟2026-09-18上午比，把已經請購過的60個又重複算了一次）
+  const usedInExports = Object.keys(exportedPairs).filter(pairKey => {
+    const [prevAt, latestAt] = pairKey.split('|');
+    return prevAt === uploadedAt || latestAt === uploadedAt;
+  });
+  if (usedInExports.length){
+    const details = usedInExports.map(pairKey => {
+      const info = exportedPairs[pairKey];
+      return `${info.exportedAt}（匯出了${(info.rows||[]).length}個品項）`;
+    }).join('、');
+    const ok = confirm(
+      `⚠️ 這筆快照（${displayName}）曾經被用來匯出過SG採購單：${details}\n\n` +
+      `如果刪掉它，之後的比對會找不到這個基準點，退回去跟更早的快照比較，可能會把「已經開過採購單的增加量」重新算成新的增加，導致重複請購——這不是理論上的風險，是真實發生過的問題。\n\n` +
+      `除非你很確定後續不會再需要用這筆快照當比對基準，否則強烈不建議刪除。\n\n真的要刪除嗎？`
+    );
+    if (!ok) return;
+  } else {
+    if (!confirm(`確定要刪除 ${displayName} 的快照嗎？此動作無法復原。`)) return;
+  }
+
+  snapshots = snapshots.filter(s => s.uploadedAt !== uploadedAt);
+  if (snapshots.length && !snapshots.some(s=>s.isBaseline)){
+    snapshots[0].isBaseline = true;
+  }
+  await saveSnapshots();
+  render();
+}
+
+// 快照清單會隨時間愈存愈多，預設收合只看「最近幾筆」＋基準日，避免整頁被拉得很長；
+// 清單本身是依日期由舊到新排序，所以收合時要保留陣列「尾端」（最新）的幾筆，不是砍尾端
+let snapListExpanded = false;
+const SNAP_COLLAPSE_THRESHOLD = 6;
+
+function snapPillHtml(s){
+  return `
+    <div class="snap-pill ${s.isBaseline?'baseline':''}">
+      <span class="d">${s.date}${s.label?` <span style="font-weight:400;color:var(--ink-soft);">(${escapeHtml(s.label)})</span>`:''}</span>
+      <span class="c">${Object.keys(s.items).length} 品項 · ${s.orderCount||0} 訂單${s.shipTo?` · 許可日≤${s.shipTo.slice(5)}(未來${s.windowDays}天)`:''}${s.excludedWarehouseQty?` · 均茂免做${s.excludedWarehouseQty}個`:''}</span>
+      ${s.isBaseline ? '<span class="tag">基準 A</span>' : `<button class="btn-gold-ghost" onclick="setBaseline('${s.uploadedAt}')">設為基準</button>`}
+      <button class="btn-danger-ghost" onclick="deleteSnapshot('${s.uploadedAt}')">刪除</button>
+    </div>
+  `;
+}
+
+function renderSnapList(){
+  const el = document.getElementById('snap-list');
+  const countEl = document.getElementById('snap-count');
+  if (!snapshots.length){
+    el.innerHTML = '<div class="empty-state">尚未上傳任何訂單檔案，請先在上方上傳第一天的訂單並設為基準日。</div>';
+    if (countEl) countEl.textContent = '';
+    applySnapListToggleControls();
+    return;
+  }
+  if (countEl) countEl.textContent = `共 ${snapshots.length} 筆`;
+
+  const total = snapshots.length;
+  let visible = snapshots;
+  let hiddenCount = 0;
+
+  if (total > SNAP_COLLAPSE_THRESHOLD && !snapListExpanded){
+    const recent = snapshots.slice(-SNAP_COLLAPSE_THRESHOLD); // 陣列尾端＝日期最新
+    const baseline = snapshots.find(s => s.isBaseline);
+    // 基準日不管多舊，收合時都固定釘在最上面，方便隨時確認目前對比基準是哪一天
+    if (baseline && !recent.includes(baseline)){
+      visible = [baseline, ...recent];
+      hiddenCount = total - recent.length - 1;
+    } else {
+      visible = recent;
+      hiddenCount = total - recent.length;
+    }
+  }
+
+  const hintHtml = hiddenCount > 0
+    ? `<div class="snap-collapsed-hint">⋯ 已收合 ${hiddenCount} 筆較舊的快照 ⋯</div>`
+    : '';
+
+  el.innerHTML = hintHtml + visible.map(snapPillHtml).join('');
+  applySnapListToggleControls();
+}
+
+// 只負責切換按鈕的顯示/文字；筆數不多時直接隱藏按鈕
+function applySnapListToggleControls(){
+  const toggleRow = document.getElementById('snap-list-toggle-row');
+  const btn = document.getElementById('snap-list-toggle-btn');
+  if (!toggleRow || !btn) return;
+  const total = snapshots.length;
+  if (total <= SNAP_COLLAPSE_THRESHOLD){
+    toggleRow.style.display = 'none';
+    return;
+  }
+  toggleRow.style.display = '';
+  btn.textContent = snapListExpanded
+    ? `收合（只看最近 ${SNAP_COLLAPSE_THRESHOLD} 筆＋基準日）▴`
+    : `顯示全部（共 ${total} 筆）▾`;
+}
+
+function toggleSnapListExpand(){
+  snapListExpanded = !snapListExpanded;
+  renderSnapList();
+}
+
+// ---------- Summary + table ----------
+function renderProductionCard(latest, allSkus){
+  renderExcessStockList();
+}
+
+function refreshOrderChangeCount(){
+  const countEl = document.getElementById('order-change-count');
+  if (!countEl) return;
+  const changes = getUnresolvedOrderChanges();
+  countEl.textContent = changes.length ? `（${changes.length} 筆待確認）` : '';
+}
+
+function renderExcessStockList(){
+  const el = document.getElementById('excess-stock-list');
+  if (!el) return;
+  const entries = Object.entries(excessStock).filter(([,qty]) => qty > 0).sort((a,b)=>a[0].localeCompare(b[0]));
+  if (!entries.length){
+    el.innerHTML = '<span style="font-size:12px;color:var(--ink-soft);">目前沒有登記任何剩餘庫存</span>';
+    return;
+  }
+  el.innerHTML = entries.map(([sku,qty]) => `
+    <span style="background:var(--baseline-bg);border:1px solid var(--gold-soft);color:var(--ink);padding:5px 10px;border-radius:999px;font-size:12.5px;display:inline-flex;align-items:center;gap:6px;">
+      ${escapeHtml(sku)}：${qty}
+      <span style="cursor:pointer;color:var(--rust-neg);font-weight:700;" onclick="clearExcessStock('${escapeHtml(sku)}')">✕</span>
+    </span>
+  `).join('');
+}
+
+function renderIgnoredLog(){
+  const table = document.getElementById('ignored-log-table');
+  if (!table) return;
+  if (!ignoredLog.length){
+    table.innerHTML = '<tbody><tr><td style="padding:10px;color:var(--ink-soft);font-size:12.5px;">目前沒有任何忽略紀錄</td></tr></tbody>';
+    return;
+  }
+  const rows = [...ignoredLog].reverse(); // 最新的排前面
+  let head = `<thead><tr><th>日期</th><th>商品編號</th><th>商品名稱</th><th class="num">數量</th><th>原因</th></tr></thead>`;
+  let body = '<tbody>' + rows.map(r => `
+    <tr>
+      <td>${escapeHtml(r.date)}</td>
+      <td class="sku">${escapeHtml(r.sku)}</td>
+      <td class="pname" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</td>
+      <td class="num">${r.qty}</td>
+      <td>${escapeHtml(r.reason)}</td>
+    </tr>
+  `).join('') + '</tbody>';
+  table.innerHTML = head + body;
+}
+
+document.getElementById('toggle-ignored-log-btn').addEventListener('click', () => {
+  const wrap = document.getElementById('ignored-log-wrap');
+  const btn = document.getElementById('toggle-ignored-log-btn');
+  const showing = wrap.style.display !== 'none';
+  wrap.style.display = showing ? 'none' : '';
+  btn.textContent = showing ? '顯示忽略紀錄' : '隱藏忽略紀錄';
+  if (!showing) renderIgnoredLog();
+});
+
+function renderRecordedLog(){
+  const table = document.getElementById('recorded-log-table');
+  if (!table) return;
+  if (!recordedLog.length){
+    table.innerHTML = '<tbody><tr><td style="padding:10px;color:var(--ink-soft);font-size:12.5px;">目前沒有任何登記紀錄</td></tr></tbody>';
+    return;
+  }
+  const rows = [...recordedLog].reverse(); // 最新的排前面
+  let head = `<thead><tr><th>日期</th><th>商品編號</th><th>商品名稱</th><th class="num">數量</th><th>來源</th></tr></thead>`;
+  let body = '<tbody>' + rows.map(r => `
+    <tr>
+      <td>${escapeHtml(r.date)}</td>
+      <td class="sku">${escapeHtml(r.sku)}</td>
+      <td class="pname" title="${escapeHtml(r.name||'')}">${escapeHtml(r.name||'')}</td>
+      <td class="num">${r.qty}</td>
+      <td>${escapeHtml(r.source||'')}</td>
+    </tr>
+  `).join('') + '</tbody>';
+  table.innerHTML = head + body;
+}
+
+document.getElementById('toggle-recorded-log-btn').addEventListener('click', () => {
+  const wrap = document.getElementById('recorded-log-wrap');
+  const btn = document.getElementById('toggle-recorded-log-btn');
+  const showing = wrap.style.display !== 'none';
+  wrap.style.display = showing ? 'none' : '';
+  btn.textContent = showing ? '顯示登記紀錄' : '隱藏登記紀錄';
+  if (!showing) renderRecordedLog();
+});
+
+function renderExportLog(){
+  const table = document.getElementById('export-log-table');
+  if (!table) return;
+  const entries = Object.entries(exportedPairs);
+  if (!entries.length){
+    table.innerHTML = '<tbody><tr><td style="padding:10px;color:var(--ink-soft);font-size:12.5px;">目前沒有任何匯出紀錄</td></tr></tbody>';
+    return;
+  }
+  // 依匯出時間新到舊排序
+  entries.sort((a,b) => (b[1].exportedAt||'').localeCompare(a[1].exportedAt||''));
+  let head = `<thead><tr><th>匯出時間</th><th>比對範圍</th><th>匯出品項數</th><th>扣掉的庫存</th></tr></thead>`;
+  let body = '<tbody>' + entries.map(([pairKey, info]) => {
+    const [prevAt, latestAt] = pairKey.split('|');
+    const prevSnap = snapshots.find(s => s.uploadedAt === prevAt);
+    const latestSnap = snapshots.find(s => s.uploadedAt === latestAt);
+    const rangeDisp = (prevSnap && latestSnap) ? `${snapDisp(prevSnap)} → ${snapDisp(latestSnap)}` : pairKey;
+    const stockUsedDesc = (info.stockUsed && info.stockUsed.length)
+      ? info.stockUsed.map(s => `${escapeHtml(s.sku)} -${s.qty}`).join('、')
+      : '（無）';
+    return `
+      <tr>
+        <td>${escapeHtml(info.exportedAt||'')}</td>
+        <td>${escapeHtml(rangeDisp)}</td>
+        <td class="num">${(info.rows||[]).length}</td>
+        <td>${stockUsedDesc}</td>
+      </tr>
+    `;
+  }).join('') + '</tbody>';
+  table.innerHTML = head + body;
+}
+
+document.getElementById('toggle-export-log-btn').addEventListener('click', () => {
+  const wrap = document.getElementById('export-log-wrap');
+  const btn = document.getElementById('toggle-export-log-btn');
+  const showing = wrap.style.display !== 'none';
+  wrap.style.display = showing ? 'none' : '';
+  btn.textContent = showing ? '顯示匯出紀錄' : '隱藏匯出紀錄';
+  if (!showing) renderExportLog();
+});
+
+// 單筆「訂單內容異動」的顯示卡片，頂部提示跟卡片5的清單共用同一份 markup
+function orderChangeRowHtml(c){
+  const statusNote = (c.prevStatus && c.latestStatus && c.prevStatus !== c.latestStatus)
+    ? `<span class="change-alert-meta">狀態：${escapeHtml(c.prevStatus)} → ${escapeHtml(c.latestStatus)}</span>` : '';
+  const shipDateChanged = c.prevShipDate && c.latestShipDate && c.prevShipDate !== c.latestShipDate;
+  const shipDateNote = c.latestShipDate
+    ? `<span class="change-alert-meta">出廠日：${shipDateChanged ? `${escapeHtml(c.prevShipDate)} → ${escapeHtml(c.latestShipDate)}（有異動）` : escapeHtml(c.latestShipDate)}</span>`
+    : '<span class="change-alert-meta">出廠日：（無資料）</span>';
+  const diffLines = c.skuDiffs.map(d => {
+    if (d.prevQty === 0) return `<div class="change-alert-diff"><span class="sku">${escapeHtml(d.sku)}</span>（${escapeHtml(d.name||'')}）：＋ 新增，數量 ${d.latestQty}</div>`;
+    if (d.latestQty === 0) return `<div class="change-alert-diff"><span class="sku">${escapeHtml(d.sku)}</span>（${escapeHtml(d.name||'')}）：－ 被移除（原本 ${d.prevQty} 個）</div>`;
+    return `<div class="change-alert-diff"><span class="sku">${escapeHtml(d.sku)}</span>（${escapeHtml(d.name||'')}）：數量 ${d.prevQty} → ${d.latestQty}</div>`;
+  }).join('');
+  return `
+    <div class="change-alert-row">
+      <div class="change-alert-head">
+        <span class="change-alert-order">訂單 ${escapeHtml(c.orderNo)}</span>
+        ${shipDateNote}
+        ${statusNote}
+      </div>
+      ${diffLines}
+      <div class="change-alert-ack-row">
+        <button class="btn-ghost" style="padding:3px 12px;font-size:11.5px;" onclick="dismissOrderChange('${escapeHtml(c.prevUploadedAt)}','${escapeHtml(c.latestUploadedAt)}','${escapeHtml(c.orderNo)}')">知道了</button>
+      </div>
+    </div>
+  `;
+}
+
+function orderChangeContextLine(){
+  if (snapshots.length < 2) return '';
+  const pPrev = snapshots[snapshots.length - 2], pLatest = snapshots[snapshots.length - 1];
+  return `<div class="hint" style="margin-bottom:10px;">比對範圍：${escapeHtml(snapDisp(pPrev))} → ${escapeHtml(snapDisp(pLatest))}（只看這一組，明天上傳新資料後會自動換成新的一組，不會累積歷史）</div>`;
+}
+
+function renderOrderChangeCard(){
+  const listEl = document.getElementById('order-change-list');
+  const countEl = document.getElementById('order-change-count');
+  if (!listEl) return;
+  const all = getUnresolvedOrderChanges(); // 已經依出廠日期排序（沒有出廠日的排最後）
+  if (countEl) countEl.textContent = all.length ? `（${all.length} 筆待確認）` : '';
+
+  const dateFromEl = document.getElementById('order-change-filter-date-from');
+  const dateToEl = document.getElementById('order-change-filter-date-to');
+  const orderNoEl = document.getElementById('order-change-filter-orderno');
+  const dateFrom = dateFromEl ? dateFromEl.value : '';
+  const dateTo = dateToEl ? dateToEl.value : '';
+  const orderNoQuery = orderNoEl ? normalizeOrderNo(orderNoEl.value) : '';
+
+  let changes = all;
+  if (dateFrom) changes = changes.filter(c => c.latestShipDate && c.latestShipDate >= dateFrom);
+  if (dateTo) changes = changes.filter(c => c.latestShipDate && c.latestShipDate <= dateTo);
+  if (orderNoQuery) changes = changes.filter(c => normalizeOrderNo(c.orderNo).includes(orderNoQuery));
+
+  const filterActive = !!(dateFrom || dateTo || orderNoQuery);
+  const filterNote = filterActive
+    ? `<div class="hint" style="margin-bottom:10px;">篩選結果：${changes.length} / ${all.length} 筆</div>`
+    : '';
+  const contextLine = orderChangeContextLine();
+
+  if (!all.length){
+    listEl.innerHTML = contextLine + filterNote + '<div class="hint">目前沒有偵測到任何訂單內容異動。</div>';
+    return;
+  }
+  if (!changes.length){
+    listEl.innerHTML = contextLine + filterNote + '<div class="hint">符合篩選條件的沒有任何項目，可以按「清除篩選」看全部。</div>';
+    return;
+  }
+  listEl.innerHTML = contextLine + filterNote + changes.map(c => `<div class="order-change-list-row">${orderChangeRowHtml(c)}</div>`).join('');
+}
+
+// 從主畫面的一行提示點過來：展開卡片5並捲動過去，不用使用者自己找
+function openOrderChangeCard(){
+  const wrap = document.getElementById('order-change-body-wrap');
+  const btn = document.getElementById('toggle-order-change-btn');
+  if (wrap.style.display === 'none'){
+    wrap.style.display = '';
+    btn.textContent = '隱藏訂單內容異動記錄';
+    renderOrderChangeCard();
+  }
+  wrap.closest('.card').scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+document.getElementById('toggle-order-change-btn').addEventListener('click', () => {
+  const wrap = document.getElementById('order-change-body-wrap');
+  const btn = document.getElementById('toggle-order-change-btn');
+  const showing = wrap.style.display !== 'none';
+  wrap.style.display = showing ? 'none' : '';
+  btn.textContent = showing ? '顯示訂單內容異動記錄' : '隱藏訂單內容異動記錄';
+  if (!showing) renderOrderChangeCard();
+});
+
+['order-change-filter-date-from','order-change-filter-date-to','order-change-filter-orderno'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', renderOrderChangeCard);
+});
+document.getElementById('order-change-filter-clear-btn').addEventListener('click', () => {
+  document.getElementById('order-change-filter-date-from').value = '';
+  document.getElementById('order-change-filter-date-to').value = '';
+  document.getElementById('order-change-filter-orderno').value = '';
+  renderOrderChangeCard();
+});
+
+// ---------- 均茂備貨清單（依到貨區間，跨區間先進先出扣抵到貨） ----------
+// 均茂的品項是現貨，不用這套工具排產，這裡只是幫忙彙整「目前每個到貨區間，均茂總共需要準備多少」，
+// 再對照均茂實際送來的量，算出還缺多少。
+//
+// 到貨的扣抵規則（這是這個功能的核心，不能簡化成「當週對當週」）：
+// 均茂送貨不是精準對應到某一個特定區間，而是連續生產、連續送貨。所以登記到貨數字時，不分是哪個區間，
+// 一律先扣「時間最早、還沒扣完的那個區間」；那個區間扣滿了，多的量才繼續往下一個區間扣。
+// 例如這週區間需要5個，但送來8個，多出的3個就會自動流向「先扣這週的5個，剩下3個留給下一個區間」，
+// 不會被當成「這週多送3個」單獨計算。全部已知區間都扣完了還有剩，代表均茂已經超前備貨，
+// 這批餘量會繼續留著，等未來上傳出現更後面的區間時，自動接著扣抵，不需要重新登記。
+function getWarehouseSummaryByWindow(){
+  if (!snapshots.length) return { groups: [], surplus: [] };
+  const latest = snapshots[snapshots.length - 1];
+  const lines = latest.warehouseLines || [];
+  const byWindow = new Map();
+  lines.forEach(r => {
+    if (r.status !== '新增' && r.status !== '異動') return; // 跟其他地方一致：刪除/結案的不算
+    const wKey = r.arrivalWindow || '（無到貨區間資訊）';
+    if (!byWindow.has(wKey)) byWindow.set(wKey, { label: wKey, skuMap: {} });
+    const g = byWindow.get(wKey);
+    if (!g.skuMap[r.sku]) g.skuMap[r.sku] = { name: r.name, qty: 0 };
+    g.skuMap[r.sku].qty += r.qty;
+    if (r.name && !g.skuMap[r.sku].name) g.skuMap[r.sku].name = r.name;
+  });
+  const groups = Array.from(byWindow.values()).map(g => ({
+    label: g.label,
+    sortKey: extractWindowSortKey(g.label) || '9999-99-99',
+    items: Object.entries(g.skuMap).map(([sku, v]) => ({ sku, name: v.name, qty: v.qty })).sort((a,b) => a.sku.localeCompare(b.sku))
+  }));
+  // 排序優先看「到貨區間」文字裡自己寫的日期（例如「9/1(二)」）——這個順序也是扣抵順序，最早的區間排最上面、最先被扣
+  groups.sort((a,b) => a.sortKey.localeCompare(b.sortKey));
+
+  // 依時間先後，把每個SKU「累計已登記到貨」的量，依序分配去扣抵各區間的應到貨量
+  const remaining = {};
+  Object.keys(warehouseReceivedTotal).forEach(sku => { remaining[sku] = warehouseReceivedTotal[sku]; });
+  groups.forEach(g => {
+    let totalQty = 0, totalReceived = 0;
+    g.items.forEach(it => {
+      const avail = remaining[it.sku] || 0;
+      const allocated = Math.max(0, Math.min(avail, it.qty));
+      it.received = allocated;
+      it.shortfall = it.qty - allocated;
+      remaining[it.sku] = avail - allocated;
+      totalQty += it.qty;
+      totalReceived += allocated;
+    });
+    // 還沒到齊的（還缺>0）依料號排在最前面，已到齊的往後放，方便回報/核對時一眼看出還缺什麼，不用整排掃過去找
+    g.items.sort((a, b) => {
+      const aShort = a.shortfall > 0, bShort = b.shortfall > 0;
+      if (aShort !== bShort) return aShort ? -1 : 1;
+      return a.sku.localeCompare(b.sku);
+    });
+    g.totalQty = totalQty;
+    g.totalReceived = totalReceived;
+    g.totalShortfall = totalQty - totalReceived;
+  });
+
+  // 全部已知區間都扣完之後還有剩的，就是均茂目前「超前備貨」的量
+  const surplus = Object.entries(remaining)
+    .filter(([,qty]) => qty > 0)
+    .map(([sku, qty]) => ({ sku, qty }))
+    .sort((a,b) => a.sku.localeCompare(b.sku));
+
+  return { groups, surplus };
+}
+
+// 從「到貨區間 9/1(二) - 9/7(一)」這類文字裡，抓出開頭的月/日當排序依據，抓不到就回傳 null
+function extractWindowSortKey(label){
+  const m = String(label||'').match(/(\d{1,2})\/(\d{1,2})/);
+  if (!m) return null;
+  return String(m[1]).padStart(2,'0') + '-' + String(m[2]).padStart(2,'0');
+}
+
+function renderWarehouseCard(){
+  const listEl = document.getElementById('warehouse-list');
+  const summaryEl = document.getElementById('warehouse-received-summary');
+  if (!listEl) return;
+
+  if (summaryEl){
+    const entries = Object.entries(warehouseReceivedTotal).filter(([,v]) => v > 0).sort((a,b) => a[0].localeCompare(b[0]));
+    summaryEl.innerHTML = entries.length
+      ? entries.map(([sku, qty]) => `
+          <span class="warehouse-recv-pill">
+            ${escapeHtml(sku)}：累計到貨 ${qty}
+            <button class="warehouse-recv-pill-x" onclick="clearWarehouseReceived('${escapeHtml(sku).replace(/'/g,"\\'")}')" title="清除這筆到貨紀錄">✕</button>
+          </span>
+        `).join('')
+      : '<span class="hint">目前還沒有登記任何到貨。</span>';
+  }
+
+  const { groups: allGroups, surplus } = getWarehouseSummaryByWindow();
+  if (!allGroups.length){
+    listEl.innerHTML = '<div class="hint">目前沒有均茂的品項資料——可能是最新一次上傳裡沒有均茂的訂單，也可能是最新一次上傳是在這個功能上線（2026-09-02）之前，還沒有保留明細，請重新上傳一次今天的總表。</div>';
+    return;
+  }
+
+  const kwEl = document.getElementById('warehouse-filter-keyword');
+  const shortageOnlyEl = document.getElementById('warehouse-filter-shortage-only');
+  const keyword = kwEl ? kwEl.value.trim().toUpperCase() : '';
+  const shortageOnly = shortageOnlyEl ? shortageOnlyEl.checked : false;
+
+  // 篩選只影響畫面顯示跟匯出內容，不影響到貨扣抵的實際計算（計算永遠是用完整資料跑）
+  const groups = allGroups.map(g => {
+    const items = g.items.filter(it => {
+      if (shortageOnly && !(it.shortfall > 0)) return false;
+      if (keyword && !(it.sku.toUpperCase().includes(keyword) || String(it.name||'').toUpperCase().includes(keyword))) return false;
+      return true;
+    });
+    return { ...g, items };
+  }).filter(g => g.items.length > 0);
+
+  const filterActive = !!(keyword || shortageOnly);
+
+  const surplusNote = surplus.length ? `
+    <div class="change-alert-pointer" style="cursor:default;">
+      📦 以下品項均茂已經超前備貨（目前所有已知區間的需求都已扣完，還有剩），會自動留著扣抵之後出現的區間，不用重新登記：
+      ${surplus.map(s => `${escapeHtml(s.sku)} x${s.qty}`).join('、')}
+    </div>
+  ` : '';
+
+  if (filterActive && !groups.length){
+    listEl.innerHTML = surplusNote + '<div class="hint">符合篩選條件的沒有任何品項，可以清空搜尋框、取消勾選看全部。</div>';
+    return;
+  }
+
+  listEl.innerHTML = surplusNote + groups.map(g => `
+    <div class="warehouse-group">
+      <div class="warehouse-group-title">
+        <span>${escapeHtml(g.label)}</span>
+        <span class="warehouse-group-total">應到貨 ${g.totalQty} 個・已到貨 ${g.totalReceived} 個${g.totalShortfall > 0 ? `・還缺 ${g.totalShortfall} 個` : '・已到齊'}</span>
+      </div>
+      <div class="table-scroll">
+        <table class="warehouse-table">
+          <thead><tr><th>料號</th><th>品名</th><th class="num">應到貨</th><th class="num">已到貨</th><th class="num">還缺</th></tr></thead>
+          <tbody>
+            ${g.items.map(it => {
+              const shortfallCls = it.shortfall > 0 ? 'delta neg' : (it.shortfall < 0 ? 'delta pos' : 'delta zero');
+              const shortfallText = it.shortfall > 0 ? it.shortfall : (it.shortfall < 0 ? `多送${-it.shortfall}` : '0');
+              return `<tr>
+                <td class="sku">${escapeHtml(it.sku)}</td>
+                <td class="pname" title="${escapeHtml(it.name||'')}">${escapeHtml(it.name||'')}</td>
+                <td class="num">${it.qty}</td>
+                <td class="num">${it.received}</td>
+                <td class="num ${shortfallCls}">${shortfallText}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `).join('');
+}
+
+['warehouse-filter-keyword','warehouse-filter-shortage-only'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', renderWarehouseCard);
+});
+
+document.getElementById('warehouse-export-btn').addEventListener('click', () => {
+  const { groups: allGroups } = getWarehouseSummaryByWindow();
+  if (!allGroups.length) return;
+
+  const kwEl = document.getElementById('warehouse-filter-keyword');
+  const shortageOnlyEl = document.getElementById('warehouse-filter-shortage-only');
+  const keyword = kwEl ? kwEl.value.trim().toUpperCase() : '';
+  const shortageOnly = shortageOnlyEl ? shortageOnlyEl.checked : false;
+
+  const groups = allGroups.map(g => ({
+    ...g,
+    items: g.items.filter(it => {
+      if (shortageOnly && !(it.shortfall > 0)) return false;
+      if (keyword && !(it.sku.toUpperCase().includes(keyword) || String(it.name||'').toUpperCase().includes(keyword))) return false;
+      return true;
+    })
+  })).filter(g => g.items.length > 0);
+
+  if (!groups.length){ alert('目前篩選結果沒有任何品項可以匯出'); return; }
+
+  const rows = [['到貨區間','料號','品名','應到貨','已到貨','還缺']];
+  groups.forEach(g => {
+    g.items.forEach(it => {
+      rows.push([g.label, it.sku, it.name||'', it.qty, it.received, it.shortfall]);
+    });
+  });
+
+  const csv = rows.map(r => r.map(c => {
+    const s = String(c ?? '');
+    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  }).join(',')).join('\n');
+
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `均茂備貨清單_${todayStr()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// 批次登記均茂到貨：一行一筆「商品編號 數量」，空白/Tab/逗號都能當分隔，方便直接從Excel複製兩欄貼上
+async function submitWarehouseReceived(){
+  const textarea = document.getElementById('warehouse-recv-bulk');
+  const msgEl = document.getElementById('warehouse-recv-msg');
+  const lines = String(textarea.value||'').split(/\r?\n/).map(l => l.trim()).filter(l => l.length);
+
+  if (!lines.length){
+    msgEl.textContent = '請至少輸入一行「商品編號 數量」';
+    msgEl.className = 'msg show err';
+    return;
+  }
+
+  const applied = [];
+  const errors = [];
+  lines.forEach((line, i) => {
+    const parts = line.split(/[\s,，]+/).filter(p => p.length);
+    if (parts.length < 2){ errors.push(`第${i+1}行「${line}」：看不出編號跟數量，已略過`); return; }
+    const sku = parts[0].trim().toUpperCase();
+    const val = Number(parts[1]);
+    if (!sku || !val || isNaN(val)){ errors.push(`第${i+1}行「${line}」：編號或數量看不懂，已略過`); return; }
+    warehouseReceivedTotal[sku] = Math.max(0, (warehouseReceivedTotal[sku] || 0) + val);
+    if (warehouseReceivedTotal[sku] === 0) delete warehouseReceivedTotal[sku];
+    applied.push(`${sku} ${val > 0 ? '+' : ''}${val}`);
+  });
+
+  if (applied.length){
+    await saveWarehouseReceived();
+    textarea.value = '';
+    renderWarehouseCard();
+  }
+
+  const parts = [];
+  if (applied.length) parts.push(`已登記 ${applied.length} 筆：${applied.join('、')}`);
+  if (errors.length) parts.push(errors.join('\n'));
+  msgEl.textContent = parts.join('\n') || '沒有任何一行是有效的登記，請確認格式';
+  msgEl.className = 'msg show ' + (!applied.length ? 'err' : (errors.length ? 'warn' : 'ok'));
+}
+
+async function clearWarehouseReceived(sku){
+  if (!confirm(`確定要清除「${sku}」目前累計登記的到貨數量嗎？此動作無法復原。`)) return;
+  delete warehouseReceivedTotal[sku];
+  await saveWarehouseReceived();
+  renderWarehouseCard();
+}
+
+document.getElementById('toggle-warehouse-btn').addEventListener('click', () => {
+  const wrap = document.getElementById('warehouse-body-wrap');
+  const btn = document.getElementById('toggle-warehouse-btn');
+  const showing = wrap.style.display !== 'none';
+  wrap.style.display = showing ? 'none' : '';
+  btn.textContent = showing ? '顯示均茂備貨清單' : '隱藏均茂備貨清單';
+  if (!showing) renderWarehouseCard();
+});
+document.getElementById('warehouse-recv-submit-btn').addEventListener('click', submitWarehouseReceived);
+
+function render(){
+  renderSnapList();
+  refreshOrderChangeCount();
+  if (document.getElementById('order-change-body-wrap') && document.getElementById('order-change-body-wrap').style.display !== 'none'){
+    renderOrderChangeCard();
+  }
+  if (document.getElementById('warehouse-body-wrap') && document.getElementById('warehouse-body-wrap').style.display !== 'none'){
+    renderWarehouseCard();
+  }
+
+  const heroCard = document.getElementById('hero-card');
+  const productionCard = document.getElementById('production-card');
+  const summaryCard = document.getElementById('summary-card');
+  const tableCard = document.getElementById('table-card');
+
+  if (snapshots.length < 1){
+    heroCard.style.display = 'none';
+    productionCard.style.display = 'none';
+    summaryCard.style.display = 'none';
+    tableCard.style.display = 'none';
+    return;
+  }
+
+  const baseline = snapshots.find(s => s.isBaseline) || snapshots[0];
+  const latest = snapshots[snapshots.length - 1];
+  const prev = snapshots.length >= 2 ? snapshots[snapshots.length - 2] : null;
+
+  // 用「訂單key值」逐筆跟前一筆／基準日比對，才能正確分辨「出貨完成」（不扣）跟「真的被取消」（要扣）
+  const prevRecon = prev ? reconcileDelta(prev, latest, latest.shipTo) : null;
+  const baseRecon = reconcileDelta(baseline, latest, latest.shipTo);
+  const projectionNote = (prevRecon && !prevRecon.exact) || !baseRecon.exact;
+
+  // union of all SKUs across all snapshots (含比對後才會出現的品項)；只保留 A/B 開頭的禮盒，過濾掉舊資料可能殘留的料件
+  const allSkus = new Map(); // sku -> name
+  snapshots.forEach(s => {
+    Object.entries(s.items).forEach(([sku,info]) => {
+      if (!isBoxSku(sku)) return;
+      if (!allSkus.has(sku) || !allSkus.get(sku)) allSkus.set(sku, info.name);
+    });
+  });
+  if (prevRecon) Object.entries(prevRecon.names).forEach(([sku,name]) => { if (isBoxSku(sku) && name && !allSkus.get(sku)) allSkus.set(sku, name); });
+  Object.entries(baseRecon.names).forEach(([sku,name]) => { if (isBoxSku(sku) && name && !allSkus.get(sku)) allSkus.set(sku, name); });
+
+  // ----- hero card: the ONE number that matters -----
+  heroCard.style.display = '';
+  const windowTotal = Object.values(latest.items).reduce((a,info) => a + info.qty, 0);
+  const windowTotalBlock = `
+    <div class="hero-sub-stat">
+      <div class="hero-sub-label">${snapDisp(latest)} 未來${latest.windowDays}天內視窗總量（含已到期需要製作的）</div>
+      <div class="hero-sub-number">${windowTotal}</div>
+    </div>
+  `;
+
+  // 「客戶確認中」的品項：數量不變動，但要提醒通知製作單位先暫停製作/出貨
+  const holdItems = [];
+  (latest.rawLines || []).forEach(r => {
+    if (r.status === '客戶確認中' && isBoxSku(r.sku)){
+      const existing = holdItems.find(h => h.sku === r.sku);
+      if (existing) existing.qty += r.qty;
+      else holdItems.push({ sku: r.sku, name: r.name, qty: r.qty });
+    }
+  });
+  holdItems.sort((a,b) => a.sku.localeCompare(b.sku));
+  const holdAlertBlock = holdItems.length ? `
+    <div class="hold-alert">
+      <div class="hold-alert-title">⏸ 以下品項客戶確認中，請通知製作單位先暫停製作、暫停出貨</div>
+      ${holdItems.map(it => `
+        <div class="hold-alert-row">
+          <span class="hold-alert-sku">${escapeHtml(it.sku)}</span>
+          <span class="hold-alert-name">${escapeHtml(it.name||'')}</span>
+          <span class="hold-alert-qty">${it.qty}</span>
+        </div>
+      `).join('')}
+      <div style="font-size:11.5px;color:var(--ink-soft);margin-top:8px;">這些品項的數量目前不會被計入或扣除，等客戶確認後狀態變化（例如變成刪除、或重新以新訂單出現），工具會自動處理，不需要手動調整。</div>
+    </div>
+  ` : '';
+
+  if (!prev){
+    document.getElementById('hero-content').innerHTML = `
+      ${holdAlertBlock}
+      <div class="hero-empty">${snapDisp(latest)} 是第一天的基準資料，還沒有前一天可以比較增加數。</div>
+      ${windowTotalBlock}
+    `;
+  } else {
+    let totalVsPrev = 0;
+    allSkus.forEach((name, sku) => { totalVsPrev += prevRecon.delta[sku] || 0; });
+
+    // 減少的品項：掃描「所有」歷史相鄰快照的比對（不只是最新一組），
+    // 只要還沒被「記錄」或「忽略」處理過，不管是哪一天發生的，都持續列出來，不會因為換了下一組比較就消失
+    const negativeItems = getUnresolvedNegativeItems();
+    const orderChanges = getUnresolvedOrderChanges();
+    const vanishedOrders = getUnresolvedVanishedOrders();
+    const cls = totalVsPrev < 0 ? 'neg' : '';
+    const sign = totalVsPrev > 0 ? '+' : '';
+    const windowNote = prev.windowDays !== latest.windowDays
+      ? `<div class="hero-sub">上次抓「未來${prev.windowDays}天」、這次抓「未來${latest.windowDays}天」，天數不同，但這個數字已經自動校正過，仍然是真正的淨增加量</div>`
+      : '';
+
+    const vanishedAlertBlock = vanishedOrders.length ? `
+      <div class="neg-alert" style="border-width:4px;">
+        <div class="neg-alert-title">🚨 以下訂單上一次還在，這次完全消失、但沒有經過結案或刪除，很可能沒有透過批次確認就被直接取消，請務必去心茶系統或現場核實</div>
+        ${vanishedOrders.map(v => {
+          const itemsJs = JSON.stringify(v.items).replace(/"/g,'&quot;');
+          const itemsSummary = v.items.map(it => `${escapeHtml(it.sku)}（${escapeHtml(it.name||'')}）x${it.qty}`).join('、');
+          const orderNoSafe = escapeHtml(v.orderNo).replace(/'/g,"\\'");
+          return `
+            <div class="neg-alert-row" style="display:block;">
+              <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+                <span class="neg-alert-sku" style="font-size:17px;">訂單 ${escapeHtml(v.orderNo)}</span>
+                <span style="font-size:11.5px;color:var(--ink-soft);">出廠日：${escapeHtml(v.prevShipDate||'（無資料）')}・上次狀態：${escapeHtml(v.prevStatus)}・消失於：${escapeHtml(v.prevSnapDisp)} → ${escapeHtml(v.latestSnapDisp)}</span>
+              </div>
+              <div style="font-size:13px;color:var(--ink);margin-bottom:8px;">${itemsSummary}</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn-gold-ghost" onclick="recordVanishedOrderStock('${v.prevUploadedAt}','${v.latestUploadedAt}','${orderNoSafe}', ${itemsJs})">確認已做好，登記為剩餘庫存</button>
+                <button class="btn-ghost" style="padding:3px 10px;font-size:11.5px;" onclick="dismissVanishedOrderMulti('${v.prevUploadedAt}','${v.latestUploadedAt}','${orderNoSafe}', ${itemsJs})">核實後沒事，忽略</button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+        <div style="font-size:11.5px;color:var(--ink-soft);margin-top:8px;">建議先去心茶系統或現場核實這張訂單的真實狀況，再決定要「登記為剩餘庫存」還是「忽略」。</div>
+      </div>
+    ` : '';
+
+    // 訂單內容異動：畫面太長了，改成只在這裡放一行提示＋連結，詳細清單全部移到卡片5，避免主畫面愈拉愈長
+    const changeAlertBlock = orderChanges.length ? `
+      <div class="change-alert-pointer" onclick="openOrderChangeCard()">
+        🔄 有 ${orderChanges.length} 筆訂單內容跟上一次不一樣，可能是廠商事後修改、沒有另外通知 —— 點這裡查看「訂單內容異動記錄」
+      </div>
+    ` : '';
+
+    const negAlertBlock = negativeItems.length ? `
+      <div class="neg-alert">
+        <div class="neg-alert-title">⚠ 以下品項數量減少，請確認是否已經多做，不要重複製作（可能是之前某一天發生的，尚未處理）</div>
+        ${negativeItems.map(it => {
+          const evidenceHtml = (it.splitReissueEvidence && it.splitReissueEvidence.length) ? `
+            <div style="margin-top:6px;padding:8px 12px;background:var(--info-bg);border:1px solid var(--info);border-radius:8px;font-size:12px;color:var(--ink);">
+              🔀 疑似訂單拆單重拋，不是真的取消：
+              ${it.splitReissueEvidence.map(ev => `
+                訂單 ${escapeHtml(ev.deletedOrderNo)}（被刪除的 ${ev.deletedQty} 個）找到姊妹訂單
+                ${ev.siblings.map(s => `${escapeHtml(s.orderNo)}（${escapeHtml(s.sku)} x${s.qty}，狀態：${escapeHtml(s.status)}）`).join('、')}
+              `).join('；')}
+              。如果姊妹訂單已經結案／出貨，建議直接「忽略」；如果姊妹訂單還是新增、貨還沒出，這批可能已經做好但還沒出貨，可以考慮「記錄」留庫存，等姊妹訂單正式需要時自動扣抵。
+            </div>
+          ` : '';
+          return `
+          <div class="neg-alert-row" style="display:block;">
+            <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
+              <span class="neg-alert-sku">${escapeHtml(it.sku)}</span>
+              <span class="neg-alert-name">${escapeHtml(it.name||'')}</span>
+              <span class="neg-alert-qty">${it.d}</span>
+              <span class="neg-alert-stock-form">
+                留庫存
+                <input type="text" inputmode="numeric" class="excess-input" data-sku="${escapeHtml(it.sku)}" value="${Math.abs(it.d)}">
+                <button class="btn-gold-ghost" onclick="recordExcessStock('${escapeHtml(it.sku)}', ${JSON.stringify(it.pairs).replace(/"/g,'&quot;')}, '${escapeHtml((it.name||'').replace(/'/g,"\\'"))}')">記錄</button>
+                <button class="btn-ghost" style="padding:3px 10px;font-size:11.5px;" onclick="dismissNegativeAlertMulti(${JSON.stringify(it.pairs).replace(/"/g,'&quot;')}, '${escapeHtml(it.sku)}', '${escapeHtml((it.name||'').replace(/'/g,"\\'"))}', ${Math.abs(it.d)}, ${it.splitReissueEvidence && it.splitReissueEvidence.length ? 'true' : 'false'})">忽略</button>
+              </span>
+            </div>
+            ${evidenceHtml}
+          </div>
+        `;
+        }).join('')}
+        <div style="font-size:11.5px;color:var(--ink-soft);margin-top:8px;">日常期間如果這批已做好的要留著當庫存，填數量後按「記錄」；如果不用處理（例如純測試資料、或已經確認沒問題），按「忽略」就不會再跳出這筆提示。檔期期間通常不用管，放著即可。</div>
+      </div>
+    ` : '';
+
+    document.getElementById('hero-content').innerHTML = `
+      ${vanishedAlertBlock}
+      ${changeAlertBlock}
+      ${negAlertBlock}
+      ${holdAlertBlock}
+      <div class="hero-label">${snapDisp(latest)} 比 ${snapDisp(prev)} 增加的禮盒數</div>
+      <div class="hero-number ${cls}">${sign}${totalVsPrev}</div>
+      <div class="hero-sub">這個數字是「淨增加」，用來知道今天要多做幾個；不是視窗內的全部數量</div>
+      ${windowNote}
+      ${projectionNote ? '<div class="hero-warn">部分比對對象是舊版資料（沒有明細可逐筆比對），此數字可能包含些微誤差</div>' : ''}
+      ${excessStockNoteBlock()}
+      ${windowTotalBlock}
+    `;
+  }
+
+  // ----- production tracking card -----
+  productionCard.style.display = '';
+  renderProductionCard(latest, allSkus);
+
+  // ----- summary card (detailed) -----
+  if (snapshots.length >= 2){
+    summaryCard.style.display = '';
+    let totalVsPrev = 0, totalVsBaseline = 0, increasedSkuCount = 0;
+    allSkus.forEach((name, sku) => {
+      const dPrev = prevRecon.delta[sku] || 0;
+      const dBase = baseRecon.delta[sku] || 0;
+      totalVsPrev += dPrev;
+      totalVsBaseline += dBase;
+      if (dPrev > 0) increasedSkuCount++;
+    });
+    const cls = v => v > 0 ? 'pos' : (v < 0 ? 'neg' : '');
+    const sign = v => v > 0 ? '+' : '';
+    document.getElementById('summary-grid').innerHTML = `
+      <div class="stat">
+        <div class="label">${snapDisp(latest)} 較 ${snapDisp(prev)}（前一次上傳）</div>
+        <div class="value ${cls(totalVsPrev)}">${sign(totalVsPrev)}${totalVsPrev}</div>
+        <div class="sub">今日應增加製作的禮盒總數</div>
+      </div>
+      <div class="stat">
+        <div class="label">${snapDisp(latest)} 較基準日 ${snapDisp(baseline)}</div>
+        <div class="value ${cls(totalVsBaseline)}">${sign(totalVsBaseline)}${totalVsBaseline}</div>
+        <div class="sub">累計淨增加（出貨完成不扣、明確取消才扣）</div>
+      </div>
+      <div class="stat">
+        <div class="label">有增加的品項數</div>
+        <div class="value">${increasedSkuCount}</div>
+        <div class="sub">共追蹤 ${allSkus.size} 種品項</div>
+      </div>
+    `;
+  } else {
+    summaryCard.style.display = 'none';
+  }
+
+  // ----- table -----
+  tableCard.style.display = '';
+  document.getElementById('table-hint').textContent =
+    `基準日：${snapDisp(baseline)}　|　最新：${snapDisp(latest)}${projectionNote ? '　|　含舊版資料估算' : ''}`;
+
+  const table = document.getElementById('data-table');
+
+  function sortArrow(key){
+    if (tableSortState.key !== key) return '<span style="opacity:0.35;">⇅</span>';
+    return tableSortState.dir === 'asc' ? '▲' : '▼';
+  }
+  function th(label, key, extraClass){
+    return `<th class="num ${extraClass||''}" style="cursor:pointer;user-select:none;" onclick="setTableSort('${key}')">${label} ${sortArrow(key)}</th>`;
+  }
+
+  let headHtml = `<thead><tr>
+    <th style="cursor:pointer;user-select:none;" onclick="setTableSort('sku')">商品編號 ${sortArrow('sku')}</th>
+    <th style="cursor:pointer;user-select:none;" onclick="setTableSort('name')">商品名稱 ${sortArrow('name')}</th>`;
+
+  // 精簡模式：只顯示「基準A」跟「最新」兩欄；完整模式：每一天都列出來
+  const baselineIdx = snapshots.findIndex(s => s.isBaseline);
+  const visibleCols = tableCompactMode
+    ? [...new Set([baselineIdx === -1 ? 0 : baselineIdx, snapshots.length - 1])].sort((a,b)=>a-b)
+    : snapshots.map((s, i) => i);
+  const hiddenCount = snapshots.length - visibleCols.length;
+
+  visibleCols.forEach(i => {
+    const s = snapshots[i];
+    const label = `${snapDisp(s)}${s.isBaseline?' (A)':''}${s.windowDays?`<br><span style="font-weight:400;font-size:10.5px;opacity:0.8;">(${s.windowDays}天)</span>`:''}`;
+    headHtml += th(label, `col:${i}`, s.isBaseline?'baseline-col':'');
+  });
+  if (tableCompactMode && hiddenCount > 0){
+    headHtml += `<th class="num" style="color:var(--ink-soft);font-weight:400;font-size:11px;">(中間${hiddenCount}天已收合)</th>`;
+  }
+  headHtml += th('較上次', 'dPrev') + th('較基準A', 'dBase') + `</tr></thead>`;
+
+  // 依目前排序狀態算出每個料號的排序依據值
+  function sortValueFor(sku, key){
+    if (key === 'sku') return sku;
+    if (key === 'name') return allSkus.get(sku) || '';
+    if (key.startsWith('col:')){
+      const i = parseInt(key.slice(4), 10);
+      return snapshots[i].items[sku]?.qty || 0;
+    }
+    if (key === 'dPrev') return prev ? (prevRecon.delta[sku] || 0) : 0;
+    if (key === 'dBase') return baseRecon.delta[sku] || 0;
+    return latest.items[sku]?.qty || 0; // fallback: latestQty 預設排序
+  }
+
+  const skuList = Array.from(allSkus.keys()).sort((a,b) => {
+    const va = sortValueFor(a, tableSortState.key);
+    const vb = sortValueFor(b, tableSortState.key);
+    let cmp;
+    if (typeof va === 'string') cmp = va.localeCompare(vb);
+    else cmp = va - vb;
+    return tableSortState.dir === 'asc' ? cmp : -cmp;
+  });
+
+  let bodyHtml = '<tbody>';
+  const colTotals = visibleCols.map(() => 0);
+  let totalVsPrev = 0, totalVsBase = 0;
+
+  skuList.forEach(sku => {
+    const name = allSkus.get(sku) || '';
+    let rowHtml = `<tr><td class="sku">${escapeHtml(sku)}</td><td class="pname" title="${escapeHtml(name)}">${escapeHtml(name)}</td>`;
+    visibleCols.forEach((i, colIdx) => {
+      const s = snapshots[i];
+      const q = s.items[sku]?.qty || 0; // 每一欄仍顯示「當天自己那個天數」算出來的總量，當作歷史紀錄
+      colTotals[colIdx] += q;
+      rowHtml += `<td class="num ${s.isBaseline?'baseline-col':''}">${q}</td>`;
+    });
+    if (tableCompactMode && hiddenCount > 0){
+      rowHtml += `<td class="num" style="color:var(--ink-soft);">…</td>`;
+    }
+    const dPrev = prev ? (prevRecon.delta[sku] || 0) : 0;
+    const dBase = baseRecon.delta[sku] || 0;
+    totalVsPrev += dPrev;
+    totalVsBase += dBase;
+    const dClass = v => v>0?'pos':(v<0?'neg':'zero');
+    const sign = v => v>0?'+':'';
+    rowHtml += `<td class="num delta ${dClass(dPrev)}">${prev? sign(dPrev)+dPrev : '—'}</td>`;
+    rowHtml += `<td class="num delta ${dClass(dBase)}">${sign(dBase)}${dBase}</td>`;
+    rowHtml += `</tr>`;
+    bodyHtml += rowHtml;
+  });
+
+  // total row
+  let totalRow = `<tr class="total-row"><td>總計</td><td></td>`;
+  colTotals.forEach((t,colIdx) => {
+    const i = visibleCols[colIdx];
+    totalRow += `<td class="num ${snapshots[i].isBaseline?'baseline-col':''}">${t}</td>`;
+  });
+  if (tableCompactMode && hiddenCount > 0){
+    totalRow += `<td class="num"></td>`;
+  }
+  const dClass = v => v>0?'pos':(v<0?'neg':'zero');
+  const sign = v => v>0?'+':'';
+  totalRow += `<td class="num delta ${dClass(totalVsPrev)}">${prev? sign(totalVsPrev)+totalVsPrev : '—'}</td>`;
+  totalRow += `<td class="num delta ${dClass(totalVsBase)}">${sign(totalVsBase)}${totalVsBase}</td>`;
+  totalRow += `</tr>`;
+  bodyHtml += totalRow + '</tbody>';
+
+  table.innerHTML = headHtml + bodyHtml;
+}
+
+// ---------- CSV export ----------
+document.getElementById('export-btn').addEventListener('click', () => {
+  if (!snapshots.length) return;
+  const baseline = snapshots.find(s => s.isBaseline) || snapshots[0];
+  const latest = snapshots[snapshots.length-1];
+  const prev = snapshots.length >= 2 ? snapshots[snapshots.length-2] : null;
+  const prevRecon = prev ? reconcileDelta(prev, latest, latest.shipTo) : null;
+  const baseRecon = reconcileDelta(baseline, latest, latest.shipTo);
+  const allSkus = new Map();
+  snapshots.forEach(s => Object.entries(s.items).forEach(([sku,info]) => {
+    if (!isBoxSku(sku)) return;
+    if (!allSkus.has(sku) || !allSkus.get(sku)) allSkus.set(sku, info.name);
+  }));
+
+  let rows = [['商品編號','商品名稱', ...snapshots.map(s=>snapDisp(s)+(s.isBaseline?'(A)':'')), '較上次','較基準A']];
+  Array.from(allSkus.keys()).forEach(sku => {
+    const name = allSkus.get(sku)||'';
+    const row = [sku, name, ...snapshots.map(s => s.items[sku]?.qty || 0)];
+    row.push(prev ? (prevRecon.delta[sku] || 0) : '');
+    row.push(baseRecon.delta[sku] || 0);
+    rows.push(row);
+  });
+
+  const csv = rows.map(r => r.map(c => {
+    const s = String(c ?? '');
+    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  }).join(',')).join('\n');
+
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `心茶禮盒增加數_${latest.date}${latest.label?'_'+latest.label:''}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ---------- SG採購單 export ----------
+document.getElementById('export-sg-btn').addEventListener('click', async () => {
+  if (snapshots.length < 2){
+    alert('至少要有 2 天的快照才能算出「較上次增加」，無法匯出。');
+    return;
+  }
+  const latest = snapshots[snapshots.length - 1];
+  const prev = snapshots[snapshots.length - 2];
+  const pairKey = `${prev.uploadedAt}|${latest.uploadedAt}`;
+
+  // 防呆：這組（prev,latest）資料如果已經匯出過，代表可能是不小心重複按到——庫存只會在物理上被用掉一次，
+  // 但沒有這個檢查的話，程式會照「目前的庫存狀態」重新算一次扣抵，等於重複扣了兩次
+  if (exportedPairs[pairKey]){
+    const prevExport = exportedPairs[pairKey];
+    const stockUsedDesc = (prevExport.stockUsed && prevExport.stockUsed.length)
+      ? `，當時扣掉的庫存：${prevExport.stockUsed.map(s => `${s.sku} -${s.qty}`).join('、')}`
+      : '，當時沒有扣任何庫存';
+    const ok = confirm(
+      `你已經在 ${prevExport.exportedAt} 匯出過「${snapDisp(prev)} → ${snapDisp(latest)}」這組的採購單了${stockUsedDesc}。\n\n` +
+      `再匯出一次，會用「目前最新的庫存狀態」重新計算扣抵——如果庫存上次已經扣過，這次會再扣一次，變成重複扣！\n\n` +
+      `除非你很確定要重新匯出（例如上次的檔案不小心弄丟了），否則請按「取消」。\n\n真的要繼續匯出嗎？`
+    );
+    if (!ok) return;
+  }
+
+  const prevRecon = reconcileDelta(prev, latest, latest.shipTo);
+
+  const allSkus = new Map();
+  snapshots.forEach(s => Object.entries(s.items).forEach(([sku,info]) => {
+    if (!isBoxSku(sku)) return;
+    if (!allSkus.has(sku) || !allSkus.get(sku)) allSkus.set(sku, info.name);
+  }));
+
+  const rows = [['庫存SKU','庫存貨品名稱','數量','成本','供應商SKU','稅款']];
+  let hasNegative = false;
+  const stockUsedNote = []; // 這次用掉了哪些庫存，供訊息顯示
+  const stockUsedList = []; // 同樣的資訊，但是結構化資料，供匯出紀錄用
+  allSkus.forEach((name, sku) => {
+    let delta = prevRecon.delta[sku] || 0;
+    if (delta < 0) hasNegative = true;
+    if (delta > 0){
+      const stock = excessStock[sku] || 0;
+      if (stock > 0){
+        const used = Math.min(stock, delta);
+        delta -= used;
+        excessStock[sku] = stock - used;
+        if (excessStock[sku] <= 0) delete excessStock[sku];
+        if (used > 0){
+          stockUsedNote.push(`${sku} 扣掉庫存 ${used}`);
+          stockUsedList.push({ sku, qty: used });
+          stockUsedLog[sku] = (stockUsedLog[sku] || 0) + used; // 累計「用庫存抵掉、沒有另外開單」的量，健康檢查要靠這個數字才不會誤判成缺口
+        }
+      }
+      if (delta > 0) rows.push([sku, name, delta, '0', '', '']);
+    }
+  });
+  await saveExcessStock();
+  await saveStockUsedLog();
+
+  if (rows.length === 1){
+    alert(`${snapDisp(latest)} 較 ${snapDisp(prev)} 沒有任何品項需要新增製作（可能都被剩餘庫存扣抵了），無需匯出採購單。`);
+    return;
+  }
+
+  // 第一列是標題，其餘依商品編號由小到大排序
+  const header = rows[0];
+  const dataRows = rows.slice(1).sort((a,b) => String(a[0]).localeCompare(String(b[0]), undefined, {numeric:true}));
+  const sortedRows = [header, ...dataRows];
+
+  // 記錄這次匯出：日期時間、匯出了哪些品項、扣了哪些庫存——之後如果又不小心重複按到，
+  // 上面的防呆視窗才能顯示「上次匯出了什麼」，不會像這次一樣完全查不到
+  exportedPairs[pairKey] = {
+    exportedAt: new Date().toLocaleString('zh-TW'),
+    rows: dataRows.map(r => ({ sku: r[0], name: r[1], qty: r[2] })),
+    stockUsed: stockUsedList
+  };
+  await saveExportedPairs();
+
+  const ws = XLSX.utils.aoa_to_sheet(sortedRows);
+  ws['!cols'] = [{wch:12},{wch:40},{wch:8},{wch:8},{wch:12},{wch:8}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '工作表2');
+  const filename = `${latest.date}${latest.label?'_'+latest.label:''}心茶B2C增製作禮盒-SG採購單.xlsx`;
+  XLSX.writeFile(wb, filename);
+
+  if (hasNegative){
+    setTimeout(() => {
+      alert('提醒：有部分品項較上次「減少」（可能訂單被改單/取消），這些品項沒有放進採購單裡，但代表目前庫存可能已經多做了，建議另外留意，不要重複製作。');
+    }, 300);
+  }
+  if (stockUsedNote.length){
+    setTimeout(() => {
+      alert('這次已自動扣抵剩餘庫存：\n' + stockUsedNote.join('\n'));
+    }, hasNegative ? 600 : 300);
+  }
+  render();
+});
+
+// ---------- toggle detail table ----------
+document.getElementById('toggle-table-btn').addEventListener('click', () => {
+  const wrap = document.getElementById('table-body-wrap');
+  const btn = document.getElementById('toggle-table-btn');
+  const showing = wrap.style.display !== 'none';
+  wrap.style.display = showing ? 'none' : '';
+  btn.textContent = showing ? '顯示詳細品項對照表' : '隱藏詳細品項對照表';
+});
+
+document.getElementById('toggle-compact-btn').addEventListener('click', () => {
+  tableCompactMode = !tableCompactMode;
+  document.getElementById('toggle-compact-btn').textContent = tableCompactMode ? '顯示完整每日記錄' : '收合為精簡檢視';
+  render();
+});
+
+// ---------- Backup / Restore ----------
+document.getElementById('backup-btn').addEventListener('click', () => {
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    tool: 'xincha-giftbox-tracker',
+    snapshots,
+    excessStock,
+    dismissedAlerts,
+    ignoredLog,
+    stockUsedLog,
+    dismissedOrderChanges,
+    warehouseReceivedTotal,
+    dismissedVanishedOrders,
+    recordedLog,
+    exportedPairs
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `心茶禮盒工具備份_${todayStr()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+function showBackupMsg(text, type){
+  const el = document.getElementById('backup-msg');
+  el.textContent = text;
+  el.className = 'msg show ' + (type||'');
+}
+
+document.getElementById('restore-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    const incoming = Array.isArray(payload) ? payload : payload.snapshots;
+    if (!Array.isArray(incoming)) throw new Error('檔案格式不正確，請確認是這個工具匯出的備份檔');
+
+    // 舊版備份檔（這次修正之前匯出的）只有 snapshots，沒有這幾項，還原時退回空值，不會報錯
+    const incomingExcessStock = (payload && typeof payload.excessStock === 'object' && payload.excessStock) || {};
+    const incomingDismissedAlerts = (payload && typeof payload.dismissedAlerts === 'object' && payload.dismissedAlerts) || {};
+    const incomingIgnoredLog = (payload && Array.isArray(payload.ignoredLog) && payload.ignoredLog) || [];
+    const incomingStockUsedLog = (payload && typeof payload.stockUsedLog === 'object' && payload.stockUsedLog) || {};
+    const incomingDismissedOrderChanges = (payload && typeof payload.dismissedOrderChanges === 'object' && payload.dismissedOrderChanges) || {};
+    const incomingWarehouseReceived = (payload && typeof payload.warehouseReceivedTotal === 'object' && payload.warehouseReceivedTotal) || {};
+    const incomingDismissedVanishedOrders = (payload && typeof payload.dismissedVanishedOrders === 'object' && payload.dismissedVanishedOrders) || {};
+    const incomingRecordedLog = (payload && Array.isArray(payload.recordedLog) && payload.recordedLog) || [];
+    const incomingExportedPairs = (payload && typeof payload.exportedPairs === 'object' && payload.exportedPairs) || {};
+    const isLegacyBackup = !payload.excessStock && !payload.dismissedAlerts && !payload.ignoredLog && !payload.stockUsedLog;
+
+    if (snapshots.length){
+      const legacyWarn = isLegacyBackup
+        ? '\n\n⚠️ 這份備份檔是舊版格式，只有快照資料，沒有包含「剩餘庫存」「忽略紀錄」等資訊，還原後這些會被清空，請自行確認是否需要手動補登。'
+        : '';
+      const choice = await showDecisionModal(
+        `目前已經有 ${snapshots.length} 筆資料。還原備份檔會用檔案裡的 ${incoming.length} 筆資料整批覆蓋掉現有紀錄（包含剩餘庫存、忽略紀錄等所有資料）。${legacyWarn}\n\n選「覆蓋這筆」＝用備份檔取代目前所有資料；選「取消上傳」則不做任何變更。`,
+        {showAdd:false, title:'還原備份確認'}
+      );
+      if (choice !== 'overwrite'){
+        e.target.value = '';
+        return;
+      }
+    }
+
+    snapshots = incoming;
+    snapshots.sort((a,b) => (a.uploadedAt||'').localeCompare(b.uploadedAt||''));
+    excessStock = incomingExcessStock;
+    dismissedAlerts = incomingDismissedAlerts;
+    ignoredLog = incomingIgnoredLog;
+    stockUsedLog = incomingStockUsedLog;
+    dismissedOrderChanges = incomingDismissedOrderChanges;
+    warehouseReceivedTotal = incomingWarehouseReceived;
+    dismissedVanishedOrders = incomingDismissedVanishedOrders;
+    recordedLog = incomingRecordedLog;
+    exportedPairs = incomingExportedPairs;
+    const saved = await saveSnapshots();
+    await saveExcessStock();
+    await saveDismissedAlerts();
+    await saveIgnoredLog();
+    await saveStockUsedLog();
+    await saveDismissedOrderChanges();
+    await saveWarehouseReceived();
+    await saveDismissedVanishedOrders();
+    await saveRecordedLog();
+    await saveExportedPairs();
+    render();
+    showBackupMsg(`已還原 ${incoming.length} 筆快照紀錄${isLegacyBackup ? '（舊版備份檔，剩餘庫存/忽略紀錄等已清空）' : ''}${saved?'':'（注意：寫入儲存失敗，重新整理頁面可能會遺失，建議再匯出一次備份確認）'}`, saved?'ok':'err');
+  } catch(err){
+    showBackupMsg('還原失敗：' + err.message, 'err');
+  } finally {
+    e.target.value = '';
+  }
+});
+
+// ---------- init ----------
+async function loadAll(){
+  sysBar('err-bar', '');
+  sysBar('load-bar', '讀取資料中…');
+  document.body.classList.add('locked');
+  await loadSnapshots();
+  await loadExcessStock();
+  await loadDismissedAlerts();
+  await loadIgnoredLog();
+  await loadRecordedLog();
+  await loadExportedPairs();
+  await loadStockUsedLog();
+  await loadDismissedOrderChanges();
+  await loadWarehouseReceived();
+  await loadDismissedVanishedOrders();
+  if (snapshots.length){
+    const lastWindowDays = snapshots[snapshots.length - 1].windowDays;
+    if (lastWindowDays){
+      windowDaysInput.value = lastWindowDays;
+      refreshShipWindow();
+    }
+  }
+  sysBar('load-bar', '');
+  document.body.classList.remove('locked');
+  render();
+}
+
+async function startLoad(){
+  try {
+    await loadAll();
+  } catch(e){
+    console.error(e);
+    sysBar('load-bar', '');
+    sysBar('err-bar', `⚠ 讀取資料失敗：${e.message}。畫面先鎖住，避免在資料不完整的狀態下上傳或匯出。請重新整理再試一次。`);
+  }
+}
+
+(function init(){
+  const versionTagEl = document.getElementById('version-tag');
+  if (versionTagEl) versionTagEl.textContent = `工具版本 ${APP_VERSION}（${APP_VERSION_DATE}）`;
+  if (DEMO){
+    sysBar('demo-bar', document.getElementById('demo-bar').textContent);
+    startLoad();
+    return;
+  }
+  document.body.classList.add('locked');
+  firebase.initializeApp(firebaseConfig);
+  fdb = firebase.firestore();
+  const provider = new firebase.auth.GoogleAuthProvider();
+  document.getElementById('login-btn').addEventListener('click', () => {
+    firebase.auth().signInWithPopup(provider).catch(() => firebase.auth().signInWithRedirect(provider));
+  });
+  let started = false;
+  firebase.auth().onAuthStateChanged(u => {
+    document.getElementById('who').textContent = u ? (u.displayName || u.email) : '';
+    if (!u){ document.getElementById('login-bar').style.display = ''; document.body.classList.add('locked'); return; }
+    document.getElementById('login-bar').style.display = 'none';
+    if (!started){ started = true; startLoad(); }
+  });
+})();
+</script>
+</body>
+</html>
