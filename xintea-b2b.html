@@ -109,7 +109,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-16-3';
+const APP_VERSION = 'v2026-11-16-4';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
@@ -274,7 +274,13 @@ function renderList(){
       <input id="q" placeholder="搜尋：採購單號、客戶、料號、生產單號" autocomplete="off">
       <div class="sortbar"><span class="mut">排序：</span>${Object.entries(SORTS).map(([k,v]) => `<button data-s="${k}" class="${SORT===k?'on':''}">${v.label}</button>`).join('')}</div>
       <p class="mut" style="margin:8px 0 0">掃採購單上的 QR 碼會直接打開該單。紅框＝生產單有異動，橘邊＝客製化。</p>
+      <div class="row" style="margin-top:10px">
+        <button class="btn ghost" id="jbNew" disabled title="下一階段推出">🔍 搜尋新訂單（準備中）</button>
+        <button class="btn ghost" id="jbSG">📦 掃描 SG 接收</button>
+      </div>
+      <div class="mut" id="wkState" style="margin-top:6px"></div>
     </div>
+    <div id="jobPanel"></div>
     <div id="listOpen"></div>
     <h3>最近已回報（可點開修改）</h3><div id="listDone"></div>`;
   el.querySelectorAll('.sortbar button').forEach(b => b.onclick = () => { SORT = b.dataset.s; el.querySelectorAll('.sortbar button').forEach(x => x.classList.toggle('on', x === b)); draw(); });
@@ -289,6 +295,50 @@ function renderList(){
     el.querySelectorAll('.po-item').forEach(b => b.onclick = () => openForm(b.dataset.po));
   };
   $('q').oninput = draw; draw();
+  $('jbSG').onclick = () => startJob('scanSG');
+  workerState();
+  if (JOB_ID) watchJob(JOB_ID);
+}
+
+/* ---------- 按鈕工作（由電腦上的 B2B 工作程式執行） ---------- */
+const COL_JOB = 'xintea_b2b_jobs';
+const JOB_NAMES = {scanSG:'掃描 SG 接收', scanNew:'搜尋新訂單'};
+let JOB_ID = null, JOB_UNSUB = null;
+async function workerState(){
+  const el = $('wkState'); if (!el) return;
+  if (DEMO){ el.textContent = '試用模式不會連到工作程式。'; return; }
+  try {
+    const d = await db.collection(COL_JOB).doc('_worker').get();
+    const at = d.exists ? new Date(d.data().at) : null;
+    const on = at && Date.now() - at < 3*60e3;
+    el.innerHTML = on ? `工作程式：<b style="color:var(--g)">在線</b>（${esc(d.data().version)}）` : `工作程式：<b style="color:var(--red)">離線</b>　請在電腦上執行 start-b2b-worker.bat${at ? '（最後在線 ' + at.toLocaleString('zh-TW', {hour12:false}) + '）' : ''}`;
+  } catch(e){ el.textContent = '讀不到工作程式狀態：' + e.message; }
+}
+async function startJob(type){
+  if (DEMO){ $('jobPanel').innerHTML = '<div class="msg warn">試用模式不能執行，請用正式網址。</div>'; return; }
+  const ref = await db.collection(COL_JOB).add({type, status:'queued', createdAt: new Date().toISOString(), by: user ? (user.displayName || user.email) : ''});
+  watchJob(ref.id);
+}
+function watchJob(id){
+  JOB_ID = id; if (JOB_UNSUB) JOB_UNSUB();
+  JOB_UNSUB = db.collection(COL_JOB).doc(id).onSnapshot(async d => {
+    const j = d.data(); const el = $('jobPanel'); if (!j || !el) return;
+    const st = {queued:'等待工作程式接手…', running:'執行中…', done:'完成', error:'失敗'}[j.status] || j.status;
+    const r = j.result || {};
+    const list = (t, a, cls) => a && a.length ? `<div class="msg ${cls}"><b>${t}（${a.length}）</b>\n${a.map(esc).join('\n')}</div>` : '';
+    el.innerHTML = `<div class="card"><div style="display:flex;align-items:center;gap:8px"><b style="flex:1">${JOB_NAMES[j.type]||j.type}：${st}</b><button class="btn gray" id="jbClose" style="padding:4px 10px;font-size:13px">關閉</button></div>
+      ${j.status === 'queued' ? '<div class="mut">如果一直停在這裡，表示電腦上的工作程式沒開。</div>' : ''}
+      ${j.type === 'scanSG' && j.status === 'done' ? `<div class="msg ok">檢查 ${r.checked} 張採購單。</div>
+        ${list('SG 已接收比回報多（請同仁補回報）', r.sgMore, 'warn')}${list('回報比 SG 已接收多（SG 待按接收）', r.reportMore, 'warn')}
+        ${list('已全部寄出、可以鎖單', r.canLock, 'ok')}${list('錯誤', r.errors, 'err')}` : ''}
+      ${j.error ? `<div class="msg err">${esc(j.error)}</div>` : ''}
+      <details ${j.status === 'done' ? '' : 'open'}><summary class="mut">執行紀錄</summary><pre style="white-space:pre-wrap;font-size:12px;margin:6px 0 0">${esc((j.log||[]).join('\n'))}</pre></details></div>`;
+    $('jbClose').onclick = () => { if (JOB_UNSUB) JOB_UNSUB(); JOB_ID = null; el.innerHTML = ''; };
+    if (j.status === 'done' && !d.metadata.hasPendingWrites && !watchJob.reloaded?.[id]){
+      (watchJob.reloaded = watchJob.reloaded || {})[id] = true;
+      await Store.loadAll(); if (VIEW === 'report' && $('listOpen')) renderList();
+    }
+  });
 }
 function itemHtml({p, m}){
   const qty = (p.lines||[]).reduce((s,l) => s + num(l.qty), 0);
