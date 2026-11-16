@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>心茶B2B 生產回報</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--g:#1f7a4d;--g2:#e8f4ee;--bd:#dcdfe3;--mut:#6b7280;--warn:#fff4e0;--err:#fdecea;--red:#c62828;--org:#e67e22;--org2:#fff3e6}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Microsoft JhengHei","PingFang TC",system-ui,sans-serif;background:#f4f5f7;color:#1f2328;font-size:15px}
+header{background:var(--g);color:#fff;padding:10px 14px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:5}
+header h1{font-size:17px;margin:0;flex:1}
+header .who{font-size:12px;opacity:.9}
+nav{display:flex;background:#fff;border-bottom:1px solid var(--bd);position:sticky;top:44px;z-index:4}
+nav button{flex:1;border:0;background:none;padding:11px 4px;font-size:15px;color:var(--mut);border-bottom:3px solid transparent}
+nav button.on{color:var(--g);border-bottom-color:var(--g);font-weight:700}
+main{max-width:980px;margin:0 auto;padding:12px}
+.card{background:#fff;border:1px solid var(--bd);border-radius:10px;padding:14px;margin-bottom:12px}
+.demo{background:var(--warn);border:1px solid #f0c36d;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:13px}
+input,select,textarea{font-size:16px;padding:9px;border:1px solid #bbb;border-radius:8px;width:100%;font-family:inherit}
+button.btn{border:0;border-radius:8px;padding:10px 16px;font-size:15px;background:var(--g);color:#fff;cursor:pointer}
+button.btn.ghost{background:#fff;color:var(--g);border:1px solid var(--g)}
+button.btn.gray{background:#eef0f2;color:#333}
+button.btn.red{background:var(--red)}
+button.btn:disabled{opacity:.5}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.row>*{flex:1;min-width:140px}
+.mut{color:var(--mut);font-size:13px}
+.po-item{display:block;width:100%;text-align:left;background:#fff;border:1px solid var(--bd);border-radius:10px;padding:0;margin-bottom:8px;cursor:pointer;font-size:15px;overflow:hidden}
+.po-item .in{padding:11px 12px}
+.po-item b{font-size:16px}
+.po-item.alert{border:2px solid var(--red)}
+.po-item.cus{border-left:5px solid var(--org)}
+.po-item.alert.cus{border-left:5px solid var(--org)}
+.alertbar{background:var(--red);color:#fff;font-weight:700;padding:6px 12px;font-size:14px}
+.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:10px;background:#eef0f2;margin-left:6px;vertical-align:middle}
+.tag.ok{background:var(--g2);color:var(--g)}
+.tag.wait{background:var(--warn);color:#8a5a00}
+.tag.cus{background:var(--org);color:#fff}
+.tag.billed{background:#e3e8f5;color:#3a4f8a}
+.meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;color:var(--mut);margin-top:4px}
+.meta b{color:#1f2328;font-size:13px}
+.sortbar{display:flex;gap:6px;margin-top:10px;align-items:center;flex-wrap:wrap}
+.sortbar button{border:1px solid var(--bd);background:#fff;border-radius:16px;padding:6px 12px;font-size:14px;cursor:pointer}
+.sortbar button.on{background:var(--g);color:#fff;border-color:var(--g)}
+h2{font-size:17px;margin:4px 0 10px}
+h3{font-size:15px;margin:14px 0 8px}
+.lines .ln{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eee}
+.lines .ln .nm{flex:1;font-size:14px}
+.lines .ln input{width:90px;flex:none;text-align:center}
+.boxes{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.bx{border:1px solid var(--bd);border-radius:10px;padding:8px;display:flex;align-items:center;gap:6px}
+.bx .lb{flex:1;font-weight:700;white-space:nowrap;min-width:42px}
+.bx .lb small{display:block;font-weight:400;color:var(--mut);font-size:11px}
+.bx button{width:38px;height:38px;border-radius:50%;border:1px solid var(--g);background:#fff;color:var(--g);font-size:20px;line-height:1}
+.bx .v{width:30px;text-align:center;font-size:18px;font-weight:700}
+.bx.has{background:var(--g2);border-color:var(--g)}
+.sum{background:#f7f8fa;border-radius:8px;padding:10px;margin-top:10px;font-size:15px}
+.msg{padding:10px 12px;border-radius:8px;margin:10px 0;white-space:pre-line}
+.msg.ok{background:var(--g2)}.msg.warn{background:var(--warn)}.msg.err{background:var(--err)}
+.redbox{border:2px solid var(--red);background:var(--err);border-radius:10px;padding:10px 12px;margin:10px 0}
+.redbox .t{color:var(--red);font-weight:700;font-size:16px;margin-bottom:4px}
+.cusbox{border:2px solid var(--org);background:var(--org2);border-radius:10px;padding:10px 12px;margin:10px 0}
+.cusbox .t{color:var(--org);font-weight:700;font-size:16px;margin-bottom:6px}
+.src{border-top:1px dashed #e0c9a6;padding:8px 0 4px}
+.src:first-of-type{border-top:0;padding-top:0}
+.kv{display:grid;grid-template-columns:76px 1fr;gap:2px 8px;font-size:14px}
+.kv dt{color:var(--mut)}.kv dd{margin:0}
+.hl{color:var(--red);font-weight:700}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{border-bottom:1px solid #e5e7eb;padding:6px 8px;text-align:left;vertical-align:top}
+th{background:#f0f2f5}
+td.n,th.n{text-align:right}
+tr.cat td{background:#f7f8fa;font-weight:700}
+tr.mrow{cursor:pointer}
+tr.det td{background:#fbfbfc;font-size:13px;color:#444}
+.scroll{overflow-x:auto}
+.bar{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--bd);padding:10px 12px;margin:0 -14px -14px;display:flex;gap:10px}
+.bar .btn{flex:1;padding:13px}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<header><h1>心茶B2B 生產回報</h1><span class="who" id="who"></span></header>
+<nav id="nav">
+  <button data-v="report" class="on">完成回報</button>
+  <button data-v="mat">用料</button>
+  <button data-v="month">月底清單</button>
+  <button data-v="admin">管理</button>
+</nav>
+<main>
+  <div id="demoBar" class="demo hidden">試用模式：資料只存在這個瀏覽器，重新整理會還原成範例資料。正式版網址：jay77jay.github.io/xintea-tools/xintea-b2b.html</div>
+  <div id="login" class="card hidden">
+    <h2>請先登入</h2>
+    <p class="mut">使用公司 Google 帳號登入後才能回報。</p>
+    <button class="btn" id="btnLogin">Google 登入</button>
+  </div>
+  <section id="v-report"></section>
+  <section id="v-mat" class="hidden"></section>
+  <section id="v-month" class="hidden"></section>
+  <section id="v-admin" class="hidden"></section>
+</main>
+<script>
+/* =========================================================
+   心茶B2B 生產回報  xintea-b2b.html
+   ★★★ 可調整設定 ★★★
+   ========================================================= */
+const APP_VERSION = 'v2026-11-16-1';
+const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
+const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
+  {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
+  {k:'B02', carton:false}, {k:'B03', carton:false},
+  {k:'S', carton:true}, {k:'M', carton:true}, {k:'L', carton:true},
+  {k:'XL', carton:true}, {k:'XXL', carton:true}, {k:'2L', carton:true}
+];
+const CARTON_KEYS = BOX_TYPES.filter(b => b.carton).map(b => b.k);
+const MAT_CAT_ORDER = ['茶餅','蛋捲','酥類','爆米花','堅果','茶包','散茶'];   // ★★★ 用料分頁的分類順序（餅乾類在前）
+const MAT_GROUP = {'茶餅':'餅乾','蛋捲':'餅乾','酥類':'餅乾','爆米花':'餅乾','堅果':'餅乾','茶包':'茶包','散茶':'茶包'};
+const LIVE_HOSTS = ['ezfun-hub.web.app', 'ezfun-hub.firebaseapp.com', 'jay77jay.github.io'];   // ★★★ 這些網域會連正式資料庫，其他網域＝試用模式
+const firebaseConfig = {
+  apiKey: "AIzaSyBmb_51Pq-QatHwKkcrNlKw0B6e8YmKAsw",
+  authDomain: "ezfun-warehouse-billing.firebaseapp.com",
+  projectId: "ezfun-warehouse-billing",
+  storageBucket: "ezfun-warehouse-billing.firebasestorage.app",
+  messagingSenderId: "175590672953",
+  appId: "1:175590672953:web:6304ddce7b45b191529be8"
+};
+/* 禮盒 BOM（只含茶包、茶點；來源：心茶禮盒訂單與用料管理） */
+const BOM = {"v":1,"date":"2026-11-02","materials":{"1010009":{"name":"3g茶包_清香四季春_香檳金","cat":"茶包"},"1010010":{"name":"3g茶包_台灣翠玉茶","cat":"茶包"},"1010011":{"name":"3g茶包_輕焙烏龍茶","cat":"茶包"},"1010012":{"name":"3g茶包_清香金萱茶_香檳金","cat":"茶包"},"1010013":{"name":"3g茶包_正欉鐵觀音_香檳金","cat":"茶包"},"1010014":{"name":"3g茶包_和束町焙茶_香檳金","cat":"茶包"},"1010015":{"name":"3g茶包_京都京番茶_香檳金","cat":"茶包"},"1010019":{"name":"3g茶包_蜜香紅烏龍_香檳金","cat":"茶包"},"1010020":{"name":"3g茶包_瑞穗蜜香綠_香檳金","cat":"茶包"},"1040004":{"name":"阿薩姆奶茶夾心餅(舊版料號)","cat":"茶餅"},"1040005":{"name":"金箔町焙三明治餅(舊版料號)","cat":"茶餅"},"1100032":{"name":"散茶半成品_花蓮蜜香紅茶_75g","cat":"散茶"},"1100033":{"name":"散茶半成品_花蓮蜜香烏龍茶_75g","cat":"散茶"},"YY000061":{"name":"金萱馥郁茶花曲奇","cat":"茶餅"},"YY000062":{"name":"阿薩姆果醬曲奇","cat":"茶餅"},"YY000063":{"name":"包種烏龍戀人餅","cat":"茶餅"},"YY000064":{"name":"脆杏仁莓果紅玉茶餅","cat":"茶餅"},"YY000066":{"name":"金箔町焙三明治餅(新名:極上焙茶三明治餅)","cat":"茶餅"},"YY000069":{"name":"蛋捲_鐵觀音+奇亞籽","cat":"蛋捲"},"YY000070":{"name":"蛋捲_包種烏龍+紅藜","cat":"蛋捲"},"YY000068":{"name":"阿薩姆奶茶夾心餅","cat":"茶餅"},"YY000087":{"name":"覆盆子紅烏龍雪球","cat":"茶餅"},"YY000086":{"name":"蝴蝶酥_蜜香綠茶","cat":"酥類"},"YY000085":{"name":"蝴蝶酥_果香紅玉","cat":"酥類"},"YY000067":{"name":"金萱鐵觀音雙茶夾心","cat":"茶餅"},"Y000002":{"name":"京番茶圓翠球餅(舊版料號,2入一組)","cat":"茶餅"},"YY000036":{"name":"金萱鐵觀音雙茶夾心(舊版料號)","cat":"茶餅"},"YY000046":{"name":"脆杏仁莓果紅玉茶餅(舊版料號)","cat":"茶餅"},"YY000047":{"name":"包種烏龍戀人餅(舊版料號)","cat":"茶餅"},"YY000048":{"name":"金萱馥郁茶花曲奇(舊版料號)","cat":"茶餅"},"YY000049":{"name":"阿薩姆果醬曲奇(舊版料號)","cat":"茶餅"},"YY000044":{"name":"蛋捲_鐵觀音+奇亞籽(舊版料號)","cat":"蛋捲"},"YY000045":{"name":"蛋捲_包種烏龍+紅藜(舊版料號)","cat":"蛋捲"},"YY000057":{"name":"菓糖爆米花_紅烏龍(CandyPoppy)","cat":"爆米花"},"YY000059":{"name":"蜜焙堅果_鐵觀音(可夫萊)","cat":"堅果"},"YY000065":{"name":"京番茶圓翠球餅(2入裝)","cat":"茶餅"},"YY000078":{"name":"金萱金桔檸檬酥","cat":"酥類"},"YY000080":{"name":"鐵觀音香橙燕麥餅","cat":"茶餅"},"Y010003":{"name":"3g茶包_日月潭紅玉_古銅金","cat":"茶包"},"Y010004":{"name":"3g茶包_阿薩姆紅茶_古銅金","cat":"茶包"},"YY000060":{"name":"蜜焙堅果_阿薩姆紅茶(可夫萊)","cat":"堅果"},"YY000079":{"name":"紅玉金鑽鳳梨酥","cat":"酥類"},"Y010011":{"name":"3g茶包_鐵觀音紅茶_古銅金","cat":"茶包"},"Y010007":{"name":"3g茶包_花蓮蜜香紅_古銅金","cat":"茶包"},"YY000089":{"name":"3g茶包_花蓮蜜香包種茶","cat":"茶包"},"YY000088":{"name":"3g茶包_花蓮蜜香烏龍茶","cat":"茶包"},"YY000090":{"name":"3g茶包_花蓮蜜香貴妃烏龍茶","cat":"茶包"},"YY000054":{"name":"3g茶包_炭焙烏龍茶_香檳金","cat":"茶包"},"Y010005":{"name":"3g茶包_日月潭紅韻_古銅金","cat":"茶包"},"Y010006":{"name":"3g茶包_蜜香山紅茶_古銅金","cat":"茶包"},"YY000083":{"name":"蛋黃酥_蜜香綠茶_白芝麻","cat":"酥類"},"YY000084":{"name":"蛋黃酥_甜香紅玉_黑芝麻","cat":"酥類"},"YY000058":{"name":"菓糖爆米花(YY000058款)","cat":"爆米花"}},"boms":{"AA00338":{"name":"單層天韻禮盒_茶點款12入","src":"B2B/B2C","items":{"YY000061":1,"YY000062":1,"YY000063":1,"YY000064":1,"YY000066":1,"YY000069":1,"YY000070":1,"YY000068":1,"YY000087":1,"YY000086":1,"YY000085":1,"YY000067":1}},"AA00340":{"name":"緞藏金匣禮盒_茶點款12入","src":"B2B/B2C","items":{"YY000061":1,"YY000062":1,"YY000063":1,"YY000064":1,"YY000066":1,"YY000069":1,"YY000070":1,"YY000068":1,"YY000087":1,"YY000086":1,"YY000085":1,"YY000067":1}},"AA00163":{"name":"新年2025雙層燙金禮盒_茶餅20x蛋捲4","src":"B2B/B2C","items":{"1040004":1,"1040005":1,"Y000002":1,"YY000036":1,"YY000046":4,"YY000047":4,"YY000048":4,"YY000049":4,"YY000044":2,"YY000045":2}},"AA00173":{"name":"常銷天地禮盒_茶餅14x蛋捲3","src":"B2B/B2C","items":{"1040004":1,"1040005":1,"Y000002":1,"YY000036":1,"YY000046":2,"YY000047":2,"YY000048":3,"YY000049":3,"YY000044":1,"YY000045":2}},"AA00242":{"name":"新年2026單層抽屜禮盒","src":"B2B","items":{"YY000057":1,"YY000059":1,"YY000061":2,"YY000062":1,"YY000064":1,"YY000065":1,"YY000066":1,"YY000069":1,"YY000070":1,"YY000078":1,"YY000080":1}},"AA00245":{"name":"新年2026天地蓋正方松木禮盒","src":"B2B/B2C","items":{"1010009":1,"1010012":1,"Y010003":1,"Y010004":1,"YY000057":1,"YY000059":1,"YY000061":2,"YY000062":1,"YY000064":1,"YY000070":1,"YY000078":1,"YY000080":1}},"AA00246":{"name":"新年2026紅色鐵盒_無茶包","src":"B2B","items":{"YY000057":1,"YY000060":1,"YY000061":2,"YY000062":1,"YY000064":1,"YY000065":1,"YY000067":1,"YY000069":1,"YY000070":1,"YY000078":2,"YY000079":2,"YY000080":2}},"AA00247":{"name":"新年2026紅色鐵盒_含茶包","src":"B2B","items":{"1010009":1,"1010012":1,"Y010003":1,"Y010004":1,"YY000057":1,"YY000060":1,"YY000061":2,"YY000062":2,"YY000064":2,"YY000069":1,"YY000070":1,"YY000078":1,"YY000079":1,"YY000080":2}},"AA00249":{"name":"新年2026雙層天蓋禮盒","src":"B2B","items":{"1010009":1,"1010011":1,"1010012":2,"Y010003":2,"Y010004":1,"Y010011":1,"YY000061":2,"YY000062":2,"YY000064":1,"YY000065":1,"YY000066":1,"YY000067":1,"YY000060":1,"YY000057":1,"YY000069":1,"YY000070":1,"YY000080":1,"YY000078":1}},"AA00333":{"name":"緞帶喜茶禮盒_爆米花款2入","src":"B2B","items":{"YY000057":2}},"AA00334":{"name":"緞帶喜茶禮盒_茶包款4入","src":"B2B","items":{"Y010007":1,"YY000089":1,"YY000088":1,"YY000090":1}},"AA00335":{"name":"輕饗茶趣禮盒_茶包茶點組10入","src":"B2B/B2C","items":{"Y010007":1,"YY000088":1,"YY000090":1,"YY000089":1,"YY000061":1,"YY000062":1,"YY000063":1,"YY000064":1,"YY000068":1,"YY000087":1}},"AA00337":{"name":"單層天韻禮盒_茶包茶點組11入","src":"B2B","items":{"Y010007":2,"YY000088":1,"YY000090":1,"YY000089":1,"YY000061":1,"YY000063":1,"YY000070":1,"YY000087":1,"YY000068":1,"YY000085":1}},"AA00341":{"name":"方韻松木禮盒_茶包茶點組12入","src":"B2B/B2C","items":{"Y010007":1,"YY000088":1,"YY000089":1,"YY000090":1,"YY000061":1,"YY000063":1,"YY000070":1,"YY000087":1,"YY000068":1,"YY000086":1,"YY000085":1,"YY000067":1}},"AA00342":{"name":"方韻松木禮盒_茶點款14入","src":"B2B","items":{"YY000061":1,"YY000062":1,"YY000063":1,"YY000064":1,"YY000068":1,"YY000070":1,"YY000069":1,"YY000067":1,"YY000066":1,"YY000087":1,"YY000086":2,"YY000085":2}},"AA00344":{"name":"紅燦金韻鐵盒_茶點款16入","src":"B2B","items":{"YY000061":1,"YY000062":1,"YY000063":1,"YY000064":1,"YY000067":1,"YY000066":1,"YY000068":1,"YY000087":1,"YY000069":1,"YY000070":1,"YY000078":1,"YY000079":1,"YY000086":2,"YY000085":2}},"AA00345":{"name":"雙層天韻禮盒_茶包茶點組22入","src":"B2B","items":{"YY000061":1,"YY000062":1,"YY000063":1,"YY000064":1,"YY000066":1,"YY000067":1,"YY000069":1,"YY000070":1,"YY000068":1,"YY000087":1,"YY000086":1,"YY000085":1,"Y010007":3,"YY000088":3,"YY000090":2,"YY000089":2}},"AA00062":{"name":"喜餅禮盒_迷你緞帶盒_純茶包2入","src":"B2C","items":{"1010012":1,"Y010003":1}},"A050010":{"name":"濃茶系甜點_黃Pizza盒_日月潭紅茶_9入","src":"B2C","items":{"YY000064":6,"YY000068":3}},"A050011":{"name":"濃茶系甜點_黃Pizza盒_職人焙烤茶_6入","src":"B2C","items":{"YY000065":3,"YY000066":3}},"A050013":{"name":"濃茶系甜點_黃Pizza盒_恬雅清香茶_12入","src":"B2C","items":{"YY000061":6,"YY000063":6}},"AA00339":{"name":"緞藏金匣禮盒_茶包茶點組13入","src":"B2C","items":{"Y010007":1,"YY000088":1,"YY000090":1,"YY000089":1,"YY000061":1,"YY000063":1,"YY000069":1,"YY000070":1,"YY000087":1,"YY000068":1,"YY000067":1,"YY000086":1,"YY000085":1}},"AA00160":{"name":"新年2025雙層燙金禮盒_22入(含茶包10)","src":"B2C","items":{"1010009":2,"1010012":2,"1040005":1,"Y010003":2,"Y010004":2,"Y010011":2,"YY000044":1,"YY000045":1,"YY000046":2,"YY000047":2,"YY000048":2,"YY000049":2,"Y000002":1}},"AA00240":{"name":"新年2026單層天蓋禮盒_茶餅10x蛋捲2","src":"B2C","items":{"YY000061":2,"YY000062":2,"YY000064":2,"YY000065":1,"YY000066":1,"YY000069":1,"YY000070":1,"YY000080":2}},"AA00241":{"name":"新年2026單層天蓋禮盒_茶餅6x蛋捲1x茶包5","src":"B2C","items":{"1010012":2,"Y010003":2,"Y010011":1,"YY000061":2,"YY000062":2,"YY000064":1,"YY000070":1,"YY000080":1}},"AA00134":{"name":"常銷黃Pizza盒_茶餅8","src":"B2C","items":{"1040004":1,"1040005":1,"Y000002":1,"YY000049":2,"YY000048":2,"YY000036":1}},"AA00279":{"name":"茶包盒_台灣茶之青12入","src":"B2C","items":{"1010009":3,"1010010":3,"1010011":3,"1010012":3}},"A010054":{"name":"常銷迷你緞帶盒_純茶包4入","src":"B2C","items":{"1010009":1,"1010012":1,"Y010003":1,"Y010004":1}},"A020012":{"name":"低咖啡因焙茶 綜合茶包4入","src":"B2C","items":{"1010013":1,"1010014":1,"1010015":1,"YY000054":1}},"A020010":{"name":"茶主題綜合茶包_日月潭紅茶4入","src":"B2C","items":{"Y010003":1,"Y010004":1,"Y010005":1,"Y010006":1}},"A020011":{"name":"茶主題綜合茶包_蜜香風味選4入","src":"B2C","items":{"1010019":1,"1010020":1,"Y010006":1,"Y010007":1}},"A020013":{"name":"茶主題綜合茶包_台灣茶之青4入","src":"B2C","items":{"1010009":1,"1010010":1,"1010011":1,"1010012":1}},"A020014":{"name":"茶主題綜合茶包_鮮奶茶專門4入","src":"B2C","items":{"1010013":1,"1010014":1,"Y010003":1,"Y010004":1}},"AA00286":{"name":"單品茶包_日月潭紅韻15入","src":"B2C","items":{"Y010005":15}},"AA00289":{"name":"單品茶包_清香金萱茶15入","src":"B2C","items":{"1010012":15}},"AA00290":{"name":"單品茶包_清香四季春15入","src":"B2C","items":{"1010009":15}},"B020001":{"name":"探索系列綜合茶包4入組(=A020010~A020014 五款4入組各1盒)","src":"B2C","items":{"1010009":1,"1010010":1,"1010011":1,"1010012":1,"1010013":2,"1010014":2,"1010015":1,"1010019":1,"1010020":1,"Y010003":2,"Y010004":2,"Y010005":1,"Y010006":2,"Y010007":1,"YY000054":1}},"AA00308":{"name":"中秋2026長韻松木禮盒_茶包茶點組18入","src":"B2B","items":{"YY000088":1,"Y010007":1,"YY000089":1,"YY000090":1,"YY000083":1,"YY000084":1,"YY000063":1,"YY000066":1,"YY000068":1,"YY000061":1,"YY000062":1,"YY000064":1,"YY000087":1,"YY000067":1,"YY000069":2,"YY000070":2}},"AA00309":{"name":"中秋2026長韻松木禮盒_茶點款19入","src":"B2B","items":{"YY000085":1,"YY000086":1,"YY000078":3,"YY000083":1,"YY000084":1,"YY000069":2,"YY000070":2,"YY000063":1,"YY000066":1,"YY000068":1,"YY000061":1,"YY000062":1,"YY000064":1,"YY000087":1,"YY000067":1}},"AA00252":{"name":"新年2026長方松木盒_30cm","src":"B2B","items":{"1010009":1,"1010012":1,"Y010003":1,"Y010004":1,"Y010011":1,"YY000061":2,"YY000062":2,"YY000064":2,"YY000065":1,"YY000067":1,"YY000058":1,"YY000059":1,"YY000060":1,"YY000069":1,"YY000070":1,"YY000078":2,"YY000079":2,"YY000080":2}},"AA00316":{"name":"中秋2026方韻松木禮盒_茶葉罐款2入","src":"B2B","items":{"1100032":1,"1100033":1}}}};
+
+/* ---------- 工具 ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const today = () => new Date(Date.now() + 8*3600e3).toISOString().slice(0,10);
+const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const md = d => d ? d.slice(5).replace('-','/') : '';
+/** 「心茶禮盒生產單_代開-20260824-2」→ 20260824-2 */
+const stripNo = s => { const m = String(s || '').match(/\d{8}-\d+/); return m ? m[0] : String(s || '').replace(/[^\w-]/g, ''); };
+const normPo = s => { const m = String(s || '').match(/(\d{3,})/); return m ? 'PO-' + m[1].padStart(4, '0') : ''; };
+const noDate = n => { const m = stripNo(n).match(/^(\d{4})(\d{2})(\d{2})/); return m ? `${m[1]}-${m[2]}-${m[3]}` : ''; };
+const srcOf = p => p.src || [];
+const alertKey = a => a.at + '|' + a.text;
+/** 已入帳月份標籤：billedManual 可為 true 或 '2026-10' */
+const billedLabel = v => { const m = String(v).match(/^\d{4}-(\d{2})$/); return m ? `已入${+m[1]}月帳` : '已入帳'; };
+
+/** 每張採購單的衍生資訊 */
+function meta(p){
+  const src = srcOf(p);
+  const added = p.addedAt || src.map(s => s.addedAt || noDate(s.prodNo)).filter(Boolean).sort()[0] || (p.prodNos||[]).map(noDate).sort()[0] || '';
+  const arrive = src.map(s => s.earliest).filter(Boolean).sort()[0] || '';
+  const custom = src.some(s => s.custom);
+  const acked = new Set(p.ack || []);
+  const alerts = src.flatMap(s => s.alerts || []).concat(p.alerts || []).filter(a => !acked.has(alertKey(a)));
+  const lastChange = src.map(s => s.changeDate).concat((p.alerts||[]).map(a => a.at)).filter(Boolean).sort().pop() || '';
+  const billed = src.filter(s => s.billedManual);
+  return {added, arrive, custom, alerts, lastChange, billedAll: src.length && billed.length === src.length, billedSome: billed.length > 0, billedTag: billed.length ? billedLabel(billed[0].billedManual) : ''};
+}
+/** ERP 工序登記用單號：只列沒有手動入帳的生產單號；沒有生產單號才用配送單號 */
+function erpNo(p){
+  const src = srcOf(p);
+  const pn = src.length ? src.filter(s => !s.billedManual).map(s => stripNo(s.prodNo)) : (p.prodNos || []).map(stripNo);
+  const u = [...new Set(pn.filter(Boolean))];
+  if (u.length) return u.join(' ');
+  const s = [...new Set((p.shipNos || []).map(stripNo).filter(Boolean))];
+  return s.length ? s.join(' ') : p.po;
+}
+function boxTotals(boxes){
+  let handling = 0; const cartons = {};
+  for (const b of BOX_TYPES){ const v = num((boxes || {})[b.k]); handling += v; if (b.carton && v) cartons[b.k] = v; }
+  return {handling, cartons};
+}
+/** 一張生產單的茶包/茶點用量：有生產單用料就用生產單，否則 BOM × 盒數（套用異動簡述的「A 換 B」） */
+function matOf(s){
+  if (s.mat) return {from:'生產單', map: Object.fromEntries(Object.entries(s.mat).filter(([c]) => BOM.materials[c]).map(([c,v]) => [c, num(v)])),
+    unknown: Object.keys(s.mat).filter(c => !BOM.materials[c])};
+  const b = BOM.boms[s.sku];
+  if (!b) return {from:'無BOM', map:{}, unknown:[]};
+  const per = Object.assign({}, b.items);
+  for (const m of String(s.changeText || '').matchAll(/([A-Z]{1,2}\d{5,7})\s*換\s*([A-Z]{1,2}\d{5,7})/g)){
+    if (per[m[1]] != null){ per[m[2]] = (per[m[2]] || 0) + per[m[1]]; delete per[m[1]]; }
+  }
+  return {from:'BOM估算', map: Object.fromEntries(Object.entries(per).map(([c,v]) => [c, v * num(s.qty)])), unknown:[]};
+}
+
+/* ---------- 資料層（Firestore 或試用模式） ---------- */
+const DEMO = !LIVE_HOSTS.includes(location.hostname);
+let db = null, user = null;
+const Store = {
+  cache: {},
+  async loadAll(){
+    if (DEMO){ this.cache = JSON.parse(JSON.stringify(DEMO_DATA)); return; }
+    const snap = await db.collection(COL_PO).get();
+    this.cache = {}; snap.forEach(d => this.cache[d.id] = d.data());
+  },
+  async get(po){
+    if (!DEMO){ const d = await db.collection(COL_PO).doc(po).get(); if (d.exists) this.cache[po] = d.data(); else delete this.cache[po]; }
+    return this.cache[po] || null;
+  },
+  async save(po, data){
+    data.updatedAt = new Date().toISOString();
+    if (!DEMO) await db.collection(COL_PO).doc(po).set(data, {merge:true});
+    this.cache[po] = Object.assign(this.cache[po] || {}, data);
+  },
+  list(){ return Object.values(this.cache).sort((a,b) => (b.po||'').localeCompare(a.po||'')); }
+};
+
+/* ---------- 啟動 ---------- */
+async function boot(){
+  if (DEMO){
+    $('demoBar').classList.remove('hidden'); $('who').textContent = '試用模式';
+    await Store.loadAll(); route(); return;
+  }
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+  firebase.auth().onAuthStateChanged(async u => {
+    user = u;
+    if (!u){ $('login').classList.remove('hidden'); hideViews(); $('who').textContent = ''; return; }
+    $('login').classList.add('hidden'); $('who').textContent = u.displayName || u.email;
+    try { await Store.loadAll(); } catch(e){ showErr('讀取資料失敗：' + e.message); return; }
+    route();
+  });
+  $('btnLogin').onclick = () => firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider())
+    .catch(() => firebase.auth().signInWithRedirect(new firebase.auth.GoogleAuthProvider()));
+}
+const VIEWS = ['report','mat','month','admin'];
+function hideViews(){ VIEWS.forEach(v => $('v-' + v).classList.add('hidden')); }
+function showErr(t){ $('v-report').innerHTML = `<div class="msg err">${esc(t)}</div>`; $('v-report').classList.remove('hidden'); }
+let VIEW = 'report', REPORT_SEEN = false, SORT = 'arrive';
+document.querySelectorAll('#nav button').forEach(b => b.onclick = () => { VIEW = b.dataset.v; route(); });
+function route(){
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.v === VIEW));
+  hideViews(); $('v-' + VIEW).classList.remove('hidden');
+  if (VIEW === 'report'){ const q = new URLSearchParams(location.search).get('po'); if (q && !REPORT_SEEN){ REPORT_SEEN = true; openForm(normPo(q)); } else renderList(); }
+  if (VIEW === 'mat') renderMat();
+  if (VIEW === 'month') renderMonth();
+  if (VIEW === 'admin') renderAdmin();
+}
+
+/* ---------- 完成回報：清單（小卡） ---------- */
+const SORTS = {
+  arrive: {label:'最早到貨日', fn:(a,b) => (a.m.arrive||'9999').localeCompare(b.m.arrive||'9999') || a.p.po.localeCompare(b.p.po)},
+  added:  {label:'新增日期',   fn:(a,b) => (b.m.added||'').localeCompare(a.m.added||'') || b.p.po.localeCompare(a.p.po)},
+  change: {label:'異動',       fn:(a,b) => (b.m.alerts.length > 0) - (a.m.alerts.length > 0) || (b.m.lastChange||'').localeCompare(a.m.lastChange||'') || (a.m.arrive||'').localeCompare(b.m.arrive||'')}
+};
+function renderList(){
+  const el = $('v-report');
+  el.innerHTML = `<div class="card">
+      <h2>選擇採購單</h2>
+      <input id="q" placeholder="搜尋：採購單號、客戶、料號、生產單號" autocomplete="off">
+      <div class="sortbar"><span class="mut">排序：</span>${Object.entries(SORTS).map(([k,v]) => `<button data-s="${k}" class="${SORT===k?'on':''}">${v.label}</button>`).join('')}</div>
+      <p class="mut" style="margin:8px 0 0">掃採購單上的 QR 碼會直接打開該單。紅框＝生產單有異動，橘邊＝客製化。</p>
+    </div>
+    <div id="listOpen"></div>
+    <h3>最近已回報（可點開修改）</h3><div id="listDone"></div>`;
+  el.querySelectorAll('.sortbar button').forEach(b => b.onclick = () => { SORT = b.dataset.s; el.querySelectorAll('.sortbar button').forEach(x => x.classList.toggle('on', x === b)); draw(); });
+  const draw = () => {
+    const q = $('q').value.trim().toLowerCase();
+    const hit = p => !q || [p.po, p.customer, p.ref, ...(p.lines||[]).map(l => l.sku), ...srcOf(p).map(s => s.prodNo)].join(' ').toLowerCase().includes(q);
+    const all = Store.list().filter(hit).map(p => ({p, m: meta(p)}));
+    const open = all.filter(x => x.p.status !== 'done').sort(SORTS[SORT].fn);
+    const done = all.filter(x => x.p.status === 'done').sort((a,b) => (b.p.done?.at||'').localeCompare(a.p.done?.at||'')).slice(0, 20);
+    $('listOpen').innerHTML = open.length ? open.map(itemHtml).join('') : '<p class="mut">沒有待回報的採購單。</p>';
+    $('listDone').innerHTML = done.length ? done.map(itemHtml).join('') : '<p class="mut">還沒有回報紀錄。</p>';
+    el.querySelectorAll('.po-item').forEach(b => b.onclick = () => openForm(b.dataset.po));
+  };
+  $('q').oninput = draw; draw();
+}
+function itemHtml({p, m}){
+  const qty = (p.lines||[]).reduce((s,l) => s + num(l.qty), 0);
+  const st = p.status === 'done' ? `<span class="tag ok">已完成 ${esc(md(p.done?.date))}</span>` : `<span class="tag wait">待回報</span>`;
+  const al = m.alerts.length ? `<div class="alertbar">⚠ 生產單異動 ${m.alerts.length} 項：${esc(m.alerts[0].text.replace(/^生產單 \S+ 列印後有異動：/, ''))}${m.alerts.length > 1 ? '…' : ''}</div>` : '';
+  return `<button class="po-item${m.alerts.length ? ' alert' : ''}${m.custom ? ' cus' : ''}" data-po="${esc(p.po)}">${al}<div class="in">
+    <b>${esc(p.po)}</b>${st}${m.custom ? '<span class="tag cus">客製</span>' : ''}${m.billedAll ? `<span class="tag billed">${m.billedTag}</span>` : m.billedSome ? `<span class="tag billed">部分${m.billedTag}</span>` : ''}<br>
+    <span>${esc(p.customer||'')}</span> · <span class="mut">${(p.lines||[]).map(l => esc(l.sku) + '×' + l.qty).join('、')}（共 ${qty}）</span>
+    <div class="meta"><span>新增 <b>${esc(m.added || '—')}</b></span><span>最早到貨 <b>${esc(md(m.arrive) || '—')}</b></span><span>製作 ${esc(md(p.date))}</span></div>
+  </div></button>`;
+}
+
+/* ---------- 完成回報：表單（打開的小卡） ---------- */
+async function openForm(poNo){
+  VIEW = 'report';
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.v === 'report'));
+  hideViews(); $('v-report').classList.remove('hidden');
+  const el = $('v-report');
+  let p = null;
+  try { p = await Store.get(poNo); } catch(e){ el.innerHTML = `<div class="msg err">讀取失敗：${esc(e.message)}</div>`; return; }
+  if (!p){ el.innerHTML = `<div class="msg err">找不到採購單 ${esc(poNo)}。\n可能還沒同步進系統，請通知 Jay。</div><button class="btn gray" id="back">回清單</button>`; $('back').onclick = renderList; return; }
+  const m = meta(p);
+  const d = p.done || {};
+  const qtyOf = sku => { const x = (d.lines||[]).find(l => l.sku === sku); return x ? x.qty : null; };
+  const boxes = Object.assign({}, d.boxes || {});
+  const srcHtml = s => {
+    const mt = matOf(s);
+    const base = BOM.boms[s.sku]?.items || {};
+    const swaps = [...String(s.changeText||'').matchAll(/([A-Z]{1,2}\d{5,7})\s*換\s*([A-Z]{1,2}\d{5,7})/g)].map(x => `${x[1]}（${BOM.materials[x[1]]?.name||''}）→ ${x[2]}（${BOM.materials[x[2]]?.name||''}）`);
+    const notes = (s.matNote || []).map(n => { const c = n.match(/[A-Z]{1,2}\d{5,7}/)?.[0]; return c && BOM.materials[c] ? n.replace(c, `${c}（${BOM.materials[c].name}）`) : n; });
+    return `<div class="src"><dl class="kv">
+      <dt>生產單</dt><dd><b>${esc(stripNo(s.prodNo))}</b>　${esc(s.sku)}×${s.qty}${s.billedManual ? ` <span class="tag billed">${billedLabel(s.billedManual)}</span>` : ''}</dd>
+      ${s.customDesc ? `<dt>客製規格</dt><dd class="hl">${esc(s.customDesc)}</dd>` : ''}
+      ${s.changeText ? `<dt>異動</dt><dd class="hl">${esc(s.changeText)}<span class="mut">（${esc(md(s.changeDate))}）</span></dd>` : ''}
+      ${swaps.length || notes.length ? `<dt>改料</dt><dd class="hl">${esc([...notes, ...swaps].join('；'))}</dd>` : ''}
+      ${s.orderNote ? `<dt>訂單備註</dt><dd>${esc(s.orderNote)}</dd>` : ''}
+      <dt>到貨</dt><dd>${esc(md(s.earliest))}～${esc(md(s.latest))}</dd>
+      <dt>用料依據</dt><dd class="mut">${mt.from}${Object.keys(base).length && mt.from === 'BOM估算' ? '（生產單下載後會改用實際用料）' : ''}</dd>
+    </dl></div>`;
+  };
+  const cusSrc = srcOf(p).filter(s => s.custom || s.changeText);
+  const stdSrc = srcOf(p).filter(s => !(s.custom || s.changeText));
+  el.innerHTML = `<div class="card">
+    <button class="btn gray" id="back" style="padding:6px 12px;font-size:13px">← 清單</button>
+    <h2 style="margin-top:10px">${esc(p.po)} ${m.custom ? '<span class="tag cus">客製</span>' : ''} ${p.status === 'done' ? '<span class="tag ok">已回報，修改後再送出會覆蓋</span>' : ''}</h2>
+    <div>${esc(p.customer||'')}</div>
+    <div class="meta"><span>新增 <b>${esc(m.added||'—')}</b></span><span>最早到貨 <b>${esc(md(m.arrive)||'—')}</b></span><span>製作 ${esc(md(p.date))}</span></div>
+    ${m.alerts.length ? `<div class="redbox"><div class="t">⚠ 生產單有異動，製作前請確認</div>${m.alerts.map(a => `<div>・${esc(a.text)} <span class="mut">${esc(a.at)}</span></div>`).join('')}
+      <button class="btn red" id="ack" style="margin-top:8px;padding:7px 14px;font-size:14px">我已確認異動</button></div>` : ''}
+    ${cusSrc.length ? `<div class="cusbox"><div class="t">★ 客製化／特殊注意事項</div>${cusSrc.map(srcHtml).join('')}</div>` : ''}
+    ${stdSrc.length ? `<div class="card" style="background:#fafafa;margin:10px 0"><div class="mut" style="margin-bottom:4px">標準品</div>${stdSrc.map(srcHtml).join('')}</div>` : ''}
+    <h3>完成日期</h3>
+    <p class="mut" style="margin:-4px 0 6px;color:#c62828">請填實際做完的日期（隔天補回報要改日期），月底依這天入帳。</p>
+    <input type="date" id="fDate" value="${esc(d.date || today())}">
+    <h3>實際數量（跟採購單不同才改）</h3>
+    <div class="lines">${(p.lines||[]).map((l,i) => `<div class="ln"><div class="nm"><b>${esc(l.sku)}</b><br><span class="mut">${esc(l.name||'')}</span><br><span class="mut">採購單 ${l.qty}</span></div>
+      <input type="number" inputmode="numeric" min="0" data-i="${i}" class="fQty" value="${qtyOf(l.sku) ?? l.qty}"></div>`).join('')}</div>
+    <h3>用了幾箱</h3>
+    <div class="boxes">${BOX_TYPES.map(b => `<div class="bx" data-k="${b.k}"><div class="lb">${b.k}<small>${b.carton ? '紙箱' : '件數'}</small></div>
+      <button data-d="-1">−</button><span class="v">0</span><button data-d="1">＋</button></div>`).join('')}</div>
+    <div class="sum" id="sum"></div>
+    <h3>備註（選填）</h3>
+    <textarea id="fNote" rows="2" placeholder="例如：少做 2 盒、換素面提袋">${esc(d.note||'')}</textarea>
+    <div id="fMsg"></div>
+    <div class="bar"><button class="btn" id="fSubmit">送出完成回報</button></div>
+  </div>`;
+  $('back').onclick = renderList;
+  if ($('ack')) $('ack').onclick = async () => {
+    const keys = [...new Set([...(p.ack||[]), ...m.alerts.map(alertKey)])];
+    await Store.save(p.po, {ack: keys}); openForm(p.po);
+  };
+  const drawBoxes = () => {
+    el.querySelectorAll('.bx').forEach(x => { const v = num(boxes[x.dataset.k]); x.querySelector('.v').textContent = v; x.classList.toggle('has', v > 0); });
+    const t = boxTotals(boxes);
+    const ct = Object.entries(t.cartons).map(([k,v]) => `${k} ${v}`).join('、');
+    $('sum').innerHTML = `訂單處理費：<b>${t.handling}</b> 件　紙箱：<b>${ct || '無'}</b>`;
+  };
+  el.querySelectorAll('.bx button').forEach(b => b.onclick = () => {
+    const k = b.closest('.bx').dataset.k; boxes[k] = Math.max(0, num(boxes[k]) + num(b.dataset.d)); drawBoxes();
+  });
+  drawBoxes();
+  $('fSubmit').onclick = async () => {
+    const date = $('fDate').value;
+    const lines = [...el.querySelectorAll('.fQty')].map(inp => ({sku: p.lines[inp.dataset.i].sku, name: p.lines[inp.dataset.i].name || '', qty: num(inp.value)}));
+    const t = boxTotals(boxes);
+    const errs = [];
+    if (!date) errs.push('請填完成日期。');
+    if (lines.some(l => l.qty < 0 || !Number.isInteger(l.qty))) errs.push('數量要是 0 以上的整數。');
+    if (!t.handling) errs.push('請輸入用了幾箱（至少 1）。');
+    if (errs.length){ $('fMsg').innerHTML = `<div class="msg err">${errs.join('\n')}</div>`; return; }
+    const diff = lines.filter((l,i) => l.qty !== num(p.lines[i].qty));
+    const sig = JSON.stringify(diff);
+    if (diff.length && $('fSubmit').dataset.ok !== sig){
+      $('fMsg').innerHTML = `<div class="msg warn">以下數量跟採購單不同：\n${diff.map(l => `${esc(l.sku)}：採購單 ${p.lines.find(x => x.sku === l.sku).qty} → 實際 ${l.qty}`).join('\n')}\n沒錯的話再按一次「確認送出」。</div>`;
+      $('fSubmit').dataset.ok = sig; $('fSubmit').textContent = '確認送出'; return;
+    }
+    const cleanBoxes = Object.fromEntries(Object.entries(boxes).filter(([,v]) => num(v) > 0));
+    $('fSubmit').disabled = true;
+    const rec = {date, lines, boxes: cleanBoxes, handling: t.handling, note: $('fNote').value.trim(),
+      by: user ? (user.displayName || user.email) : '試用', at: new Date().toISOString()};
+    const hist = p.status === 'done' && p.done ? [...(p.history||[]), p.done] : (p.history||[]);
+    try {
+      await Store.save(p.po, {status:'done', done: rec, history: hist, sync: {sg:false, sheet:false}});
+      el.innerHTML = `<div class="card"><div class="msg ok">${esc(p.po)} 已回報完成 ✔\n完成日 ${esc(date)}，訂單處理費 ${t.handling} 件${Object.keys(t.cartons).length ? '，紙箱 ' + Object.entries(t.cartons).map(([k,v]) => k + ' ' + v).join('、') : ''}。\n紙本採購單照常交回給 Jay。</div>
+        <button class="btn" id="next">回報下一張</button></div>`;
+      $('next').onclick = renderList;
+    } catch(e){ $('fSubmit').disabled = false; $('fMsg').innerHTML = `<div class="msg err">送出失敗：${esc(e.message)}\n請再按一次，或拍照給 Jay。</div>`; }
+  };
+}
+
+/* ---------- 用料（目前總需要） ---------- */
+let MAT_GROUP_SEL = 'all', MAT_OPEN = {};
+function matData(toDate){
+  const need = {}, missing = {}, unknown = {};
+  let poCnt = 0, boxCnt = 0, fromProd = 0, fromBom = 0;
+  const open = Store.list().filter(p => p.status !== 'done');
+  for (const p of open){
+    let used = false;
+    for (const s of srcOf(p)){
+      if (toDate && s.earliest && s.earliest > toDate) continue;
+      used = true; boxCnt += num(s.qty);
+      const mt = matOf(s);
+      if (mt.from === '無BOM'){ (missing[s.sku] = missing[s.sku] || []).push(`${p.po} ${stripNo(s.prodNo)}×${s.qty}`); continue; }
+      mt.from === '生產單' ? fromProd++ : fromBom++;
+      mt.unknown.forEach(c => (unknown[c] = unknown[c] || new Set()).add(p.po));
+      for (const [c, q] of Object.entries(mt.map)){
+        if (!q) continue;
+        const n = need[c] = need[c] || {code:c, qty:0, prod:0, bom:0, rows:[]};
+        n.qty += q; mt.from === '生產單' ? n.prod += q : n.bom += q;
+        n.rows.push({po:p.po, customer:p.customer, prodNo:stripNo(s.prodNo), sku:s.sku, box:s.qty, qty:q, from:mt.from, earliest:s.earliest});
+      }
+    }
+    if (used) poCnt++;
+  }
+  const done = Store.list().filter(p => p.status === 'done');
+  return {need, missing, unknown, poCnt, boxCnt, fromProd, fromBom, doneCnt: done.length};
+}
+function renderMat(){
+  const el = $('v-mat');
+  el.innerHTML = `<div class="card"><h2>目前總需要用料（茶點、茶包）</h2>
+    <p class="mut" style="margin-top:0">只算還沒回報完成的採購單；回報完成後會自動扣掉。有下載生產單的用生產單實際用料（含客製改料），還沒有的先用 BOM 估算。</p>
+    <div class="row"><div><label class="mut">最早到貨日在這天以前（空白＝全部）</label><input type="date" id="mTo"></div>
+    <div><label class="mut">顯示</label><select id="mGrp"><option value="all">全部</option><option value="餅乾">只看茶點（餅乾類）</option><option value="茶包">只看茶包</option></select></div></div>
+    <div id="mRes"></div></div>`;
+  $('mGrp').value = MAT_GROUP_SEL;
+  const draw = () => {
+    MAT_GROUP_SEL = $('mGrp').value;
+    const r = matData($('mTo').value);
+    const rows = Object.values(r.need).map(n => Object.assign(n, BOM.materials[n.code]))
+      .filter(n => MAT_GROUP_SEL === 'all' || MAT_GROUP[n.cat] === MAT_GROUP_SEL)
+      .sort((a,b) => (MAT_CAT_ORDER.indexOf(a.cat)+1||99) - (MAT_CAT_ORDER.indexOf(b.cat)+1||99) || b.qty - a.qty);
+    let html = `<div class="msg ok">未完成 ${r.poCnt} 張採購單、${r.boxCnt} 盒；已回報完成 ${r.doneCnt} 張不列入。\n用料依據：生產單 ${r.fromProd} 張、BOM 估算 ${r.fromBom} 張。</div>`;
+    if (Object.keys(r.missing).length) html += `<div class="msg warn">以下禮盒沒有 BOM，用料沒算進去：\n${Object.entries(r.missing).map(([k,v]) => `${k}：${v.join('、')}`).join('\n')}</div>`;
+    if (Object.keys(r.unknown).length) html += `<div class="msg warn">生產單裡有不在 BOM 清單的料號，請確認是否為茶點／茶包：\n${Object.entries(r.unknown).map(([k,v]) => `${k}（${[...v].join('、')}）`).join('\n')}</div>`;
+    html += `<div class="scroll"><table><tr><th>料號</th><th>品名</th><th class="n">需要</th><th class="n">生產單</th><th class="n">BOM估算</th></tr>`;
+    let cat = null;
+    for (const n of rows){
+      if (n.cat !== cat){
+        cat = n.cat;
+        const sub = rows.filter(x => x.cat === cat).reduce((s,x) => s + x.qty, 0);
+        html += `<tr class="cat"><td colspan="2">${esc(cat)}（${MAT_GROUP[cat] === '餅乾' ? '茶點' : '茶包'}）</td><td class="n">${sub}</td><td colspan="2"></td></tr>`;
+      }
+      html += `<tr class="mrow" data-c="${esc(n.code)}"><td>${esc(n.code)}</td><td>${esc(n.name)} <span class="mut">▸</span></td><td class="n"><b>${n.qty}</b></td><td class="n">${n.prod || ''}</td><td class="n">${n.bom || ''}</td></tr>`;
+      if (MAT_OPEN[n.code]) html += n.rows.sort((a,b) => (a.earliest||'').localeCompare(b.earliest||'')).map(x =>
+        `<tr class="det"><td>${esc(x.po)}</td><td>${esc(x.customer)}　${esc(x.prodNo)} ${esc(x.sku)}×${x.box}　到貨 ${esc(md(x.earliest))}</td><td class="n">${x.qty}</td><td colspan="2">${x.from}</td></tr>`).join('');
+    }
+    html += rows.length ? '' : '<tr><td colspan="5" class="mut">沒有需要的料。</td></tr>';
+    html += '</table></div>';
+    $('mRes').innerHTML = html;
+    $('mRes').querySelectorAll('.mrow').forEach(tr => tr.onclick = () => { MAT_OPEN[tr.dataset.c] = !MAT_OPEN[tr.dataset.c]; draw(); });
+  };
+  $('mTo').onchange = draw; $('mGrp').onchange = draw; draw();
+}
+
+/* ---------- 月底清單 ---------- */
+function monthData(ym){
+  const done = Store.list().filter(p => p.status === 'done' && (p.done?.date || '').startsWith(ym))
+    .sort((a,b) => (a.done.date + a.po).localeCompare(b.done.date + b.po));
+  const sysRows = [], erpRows = [], skipped = [];
+  for (const p of done){
+    const src = srcOf(p);
+    const billedQty = {};
+    src.filter(s => s.billedManual).forEach(s => billedQty[s.sku] = (billedQty[s.sku]||0) + num(s.qty));
+    const allBilled = src.length && src.every(s => s.billedManual);
+    if (allBilled){ skipped.push(p.po); continue; }
+    for (const l of p.done.lines || []){
+      const q = Math.max(0, num(l.qty) - (billedQty[l.sku] || 0));
+      if (q > 0) sysRows.push({sku:l.sku, name:l.name || (p.lines||[]).find(x => x.sku === l.sku)?.name || '', qty:q, po:p.po, date:p.done.date});
+    }
+    const t = boxTotals(p.done.boxes);
+    erpRows.push({date:p.done.date, no:erpNo(p), po:p.po, customer:p.customer||'', handling:t.handling, cartons:t.cartons, boxes:p.done.boxes||{}, note:p.done.note||'', partial: Object.keys(billedQty).length > 0});
+  }
+  const skuSum = {};
+  sysRows.forEach(r => { skuSum[r.sku] = skuSum[r.sku] || {sku:r.sku, name:r.name, qty:0}; skuSum[r.sku].qty += r.qty; });
+  const tot = {handling: erpRows.reduce((s,r) => s + r.handling, 0), cartons: {}};
+  erpRows.forEach(r => Object.entries(r.cartons).forEach(([k,v]) => tot.cartons[k] = (tot.cartons[k]||0) + v));
+  const pending = Store.list().filter(p => p.status !== 'done' && (p.date || '') <= ym + '-31');
+  return {done, sysRows, erpRows, skipped, skuSum: Object.values(skuSum).sort((a,b) => a.sku.localeCompare(b.sku)), tot, pending};
+}
+function renderMonth(){
+  const el = $('v-month');
+  const d = new Date(Date.now() + 8*3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1);
+  el.innerHTML = `<div class="card"><div class="row"><div><label class="mut">月份（依製作完成日）</label><input type="month" id="mYm" value="${d.toISOString().slice(0,7)}"></div>
+    <div style="flex:none"><button class="btn" id="mXlsx">下載 Excel</button></div></div><div id="mBody"></div></div>`;
+  const draw = () => {
+    const ym = $('mYm').value; const r = monthData(ym);
+    $('mBody').innerHTML = `
+      ${r.pending.length ? `<div class="msg warn">還有 ${r.pending.length} 張預計日期在 ${ym} 以前的採購單沒有回報：${r.pending.map(p => p.po).join('、')}</div>` : ''}
+      ${r.skipped.length ? `<div class="msg">已入前月帳、本月不列入：${r.skipped.join('、')}</div>` : ''}
+      <p>本月完成 <b>${r.done.length - r.skipped.length}</b> 張採購單，<b>${r.sysRows.reduce((s,x) => s + x.qty, 0)}</b> 盒；訂單處理費 <b>${r.tot.handling}</b> 件；紙箱 ${Object.entries(r.tot.cartons).map(([k,v]) => k + ' ' + v).join('、') || '無'}。</p>
+      <h3>① 系統輸出要加的列（貼到「系統輸出」最下面）</h3>
+      <div class="scroll"><table><tr><th>編號</th><th>品名</th><th class="n">出庫數量</th><th>採購單</th><th>完成日</th></tr>
+      ${r.sysRows.map(x => `<tr><td>${esc(x.sku)}</td><td>${esc(x.name)}</td><td class="n">${x.qty}</td><td>${esc(x.po)}</td><td>${esc(x.date)}</td></tr>`).join('') || '<tr><td colspan="5" class="mut">沒有資料</td></tr>'}
+      </table></div>
+      <h3>② ERP 工序登記（訂單處理費／紙箱）</h3>
+      <div class="scroll"><table><tr><th>完成日（製作完成）</th><th>單號</th><th>客戶</th><th class="n">訂單處理費</th>${CARTON_KEYS.map(k => `<th class="n">${k}紙箱</th>`).join('')}<th>箱型明細</th><th>採購單</th></tr>
+      ${r.erpRows.map(x => `<tr><td>${esc(x.date)}</td><td>${esc(x.no)}${x.partial ? ' <span class="tag billed">部分已入前月帳</span>' : ''}</td><td>${esc(x.customer)}</td><td class="n">${x.handling}</td>${CARTON_KEYS.map(k => `<td class="n">${x.cartons[k]||''}</td>`).join('')}<td>${Object.entries(x.boxes).map(([k,v]) => k + ' ' + v).join('、')}</td><td>${esc(x.po)}</td></tr>`).join('')}
+      ${r.erpRows.length ? `<tr><th colspan="3">合計</th><th class="n">${r.tot.handling}</th>${CARTON_KEYS.map(k => `<th class="n">${r.tot.cartons[k]||''}</th>`).join('')}<th colspan="2"></th></tr>` : '<tr><td colspan="12" class="mut">沒有資料</td></tr>'}
+      </table></div>
+      <h3>③ 各料號合計（核對用）</h3>
+      <div class="scroll"><table><tr><th>編號</th><th>品名</th><th class="n">數量</th></tr>
+      ${r.skuSum.map(x => `<tr><td>${esc(x.sku)}</td><td>${esc(x.name)}</td><td class="n">${x.qty}</td></tr>`).join('')}</table></div>`;
+  };
+  $('mYm').onchange = draw; draw();
+  $('mXlsx').onclick = () => {
+    const ym = $('mYm').value; const r = monthData(ym);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['編號','品名','出庫數量','採購單','完成日'], ...r.sysRows.map(x => [x.sku, x.name, x.qty, x.po, x.date])]), '系統輸出加列');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['完成日','單號','客戶','訂單處理費', ...CARTON_KEYS.map(k => k + '紙箱'),'箱型明細','採購單','備註'],
+      ...r.erpRows.map(x => [x.date, x.no, x.customer, x.handling, ...CARTON_KEYS.map(k => x.cartons[k] || ''), Object.entries(x.boxes).map(([k,v]) => k + ' ' + v).join('、'), x.po, x.note]),
+      ['合計','','', r.tot.handling, ...CARTON_KEYS.map(k => r.tot.cartons[k] || '')]]), 'ERP工序登記');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['編號','品名','數量'], ...r.skuSum.map(x => [x.sku, x.name, x.qty])]), '料號合計');
+    XLSX.writeFile(wb, `心茶B2B月底清單_${ym}.xlsx`);
+  };
+}
+
+/* ---------- 管理 ---------- */
+function renderAdmin(){
+  const el = $('v-admin');
+  const all = Store.list();
+  const unsynced = all.filter(p => p.status === 'done' && (!p.sync?.sg || !p.sync?.sheet));
+  el.innerHTML = `<div class="card"><h2>同步狀態</h2>
+    <p class="mut">完成回報後，SG 標「已接收」和 Google 表回填「已生產日期」由 Claude 定時處理。</p>
+    ${unsynced.length ? `<div class="scroll"><table><tr><th>採購單</th><th>完成日</th><th>SG 已接收</th><th>Google 表</th></tr>
+      ${unsynced.map(p => `<tr><td>${esc(p.po)}</td><td>${esc(p.done.date)}</td><td>${p.sync?.sg ? '✔' : '待處理'}</td><td>${p.sync?.sheet ? '✔' : '待處理'}</td></tr>`).join('')}</table></div>` : '<div class="msg ok">全部已同步。</div>'}
+    <p class="mut">共 ${all.length} 張採購單，待回報 ${all.filter(p => p.status !== 'done').length} 張。BOM ${Object.keys(BOM.boms).length} 個禮盒、${Object.keys(BOM.materials).length} 種料。版本 ${APP_VERSION}</p></div>`;
+}
+
+/* ---------- 給 Claude 用的同步介面（在已登入的頁面 console 呼叫） ---------- */
+/** 新增或更新採購單基本資料（含 src 生產單明細；不覆蓋 done / ack） */
+window.b2bUpsertPOs = async function(list){
+  const out = {added:0, updated:0};
+  for (const x of list){
+    const po = normPo(x.po); if (!po) continue;
+    const exist = Store.cache[po];
+    const base = {po, sgId:x.sgId||null, ref:x.ref||'', customer:x.customer||'', date:x.date||'', prodNos:x.prodNos||[], shipNos:x.shipNos||[],
+      src:x.src||[], lines:(x.lines||[]).map(l => ({sku:l.sku, name:l.name||'', qty:num(l.qty)}))};
+    if (x.addedAt) base.addedAt = x.addedAt;
+    if (!exist) base.status = 'open';
+    await Store.save(po, base); exist ? out.updated++ : out.added++;
+  }
+  return out;
+};
+window.b2bMarkSynced = async function(po, kind){ const p = Store.cache[normPo(po)]; if (!p) return false; await Store.save(p.po, {sync: Object.assign({}, p.sync, {[kind]: true})}); return true; };
+window.b2bPending = () => Store.list().filter(p => p.status === 'done' && (!p.sync?.sg || !p.sync?.sheet)).map(p => ({po:p.po, sgId:p.sgId, done:p.done, prodNos:p.prodNos, sync:p.sync}));
+window.b2bReload = () => Store.loadAll();
+
+/* ---------- 試用模式範例資料（2026-11 實際心茶B2B 採購單＋生產單大表） ---------- */
+const DEMO_DATA = {"PO-0743": {"po": "PO-0743", "date": "2026-11-17", "customer": "喜餅＿鍾明哲", "status": "open", "prodNos": ["心茶禮盒生產單_代開-20261027-6"], "shipNos": [], "src": [{"prodNo": "心茶禮盒生產單_代開-20261027-6", "sku": "AA00340", "qty": 10, "custom": true, "customDesc": "客製化賀卡／客製化內容物", "earliest": "2026-12-03", "latest": "2026-12-05", "printed": "2026-11-09", "changeDate": "2026-11-09", "changeText": "改12/2黑貓寄出", "orderNote": "贈送：京番茶圓翠球餅50份／紅烏龍馥盆子球餅50份，皆不附盒，門市自取", "mat": {"YY000061": 10, "YY000062": 10, "YY000063": 10, "YY000064": 10, "YY000066": 20, "YY000067": 10, "YY000068": 0, "YY000069": 10, "YY000070": 10, "YY000085": 10, "YY000086": 10, "YY000087": 10}, "matNote": ["YY000066 原為1改為2", "YY000068 刪除料件"], "billedManual": false, "alerts": [{"at": "2026-11-09", "text": "生產單 20261027-6 列印後有異動：改12/2黑貓寄出"}]}], "lines": [{"sku": "AA00340", "name": "《禮盒.伴手禮》緞藏金匣禮盒_茶點款12入_綻花紅", "qty": 10}]}, "PO-0723": {"po": "PO-0723", "date": "2026-11-05", "customer": "喜餅＿鍾明哲", "status": "open", "prodNos": ["心茶禮盒生產單_代開-20261027-1", "心茶禮盒生產單_代開-20261027-2", "心茶禮盒生產單_代開-20261027-3"], "shipNos": [], "src": [{"prodNo": "心茶禮盒生產單_代開-20261027-1", "sku": "AA00333", "qty": 5, "custom": false, "customDesc": "", "earliest": "2026-11-04", "latest": "2026-11-06", "printed": "2026-10-28", "changeDate": "", "changeText": "", "orderNote": "贈送：京番茶圓翠球餅50份／紅烏龍馥盆子球餅50份，皆不附盒，門市自取", "mat": null, "matNote": [], "billedManual": "2026-10", "alerts": []}, {"prodNo": "心茶禮盒生產單_代開-20261027-2", "sku": "AA00340", "qty": 83, "custom": true, "customDesc": "客製化賀卡／客製化內容物", "earliest": "2026-11-04", "latest": "2026-11-06", "printed": "2026-10-28", "changeDate": "2026-10-29", "changeText": "換71素面提袋", "orderNote": "贈送：京番茶圓翠球餅50份／紅烏龍馥盆子球餅50份，皆不附盒，門市自取", "mat": null, "matNote": [], "billedManual": "2026-10", "alerts": [{"at": "2026-10-29", "text": "生產單 20261027-2 列印後有異動：換71素面提袋"}]}, {"prodNo": "心茶禮盒生產單_代開-20261027-3", "sku": "AA00345", "qty": 2, "custom": true, "customDesc": "客製化賀卡", "earliest": "2026-11-04", "latest": "2026-11-06", "printed": "2026-10-28", "changeDate": "", "changeText": "", "orderNote": "贈送：京番茶圓翠球餅50份／紅烏龍馥盆子球餅50份，皆不附盒，門市自取", "mat": null, "matNote": [], "billedManual": "2026-10", "alerts": []}], "lines": [{"sku": "AA00333", "name": "《禮盒.伴手禮》緞帶喜茶禮盒爆米花款2入喜慶橙", "qty": 5}, {"sku": "AA00340", "name": "《禮盒.伴手禮》緞藏金匣禮盒_茶點款12入_綻花紅", "qty": 83}, {"sku": "AA00345", "name": "《禮盒.伴手禮》雙層天韻禮盒_茶包・茶點組22入_綻花橙", "qty": 2}]}, "PO-0718": {"po": "PO-0718", "date": "2026-11-23", "customer": "喜餅＿陳怡均", "status": "open", "prodNos": ["心茶禮盒生產單_代開-20260909-1"], "shipNos": [], "src": [{"prodNo": "心茶禮盒生產單_代開-20260909-1", "sku": "AA00340", "qty": 50, "custom": false, "customDesc": "", "earliest": "2026-11-24", "latest": "2026-11-26", "printed": "2026-10-27", "changeDate": "2026-10-30", "changeText": "換71素面提袋", "orderNote": "", "mat": null, "matNote": [], "billedManual": false, "alerts": [{"at": "2026-10-30", "text": "生產單 20260909-1 列印後有異動：換71素面提袋"}]}], "lines": [{"sku": "AA00340", "name": "《禮盒.伴手禮》緞藏金匣禮盒_茶點款12入_綻花紅", "qty": 50}]}, "PO-0717": {"po": "PO-0717", "date": "2026-11-12", "customer": "喜餅＿周峮宇", "status": "open", "prodNos": ["心茶禮盒生產單_代開-20261019-1"], "shipNos": [], "src": [{"prodNo": "心茶禮盒生產單_代開-20261019-1", "sku": "AA00337", "qty": 70, "custom": true, "customDesc": "客製化內容物", "earliest": "2026-11-12", "latest": "2026-11-16", "printed": "2026-10-27", "changeDate": "", "changeText": "", "orderNote": "", "mat": null, "matNote": [], "billedManual": false, "alerts": []}], "lines": [{"sku": "AA00337", "name": "《禮盒.伴手禮》單層天韻禮盒_茶包・茶點組11入_綻花橙", "qty": 70}]}, "PO-0716": {"po": "PO-0716", "date": "2026-11-04", "customer": "喜餅＿孫筱晴", "status": "open", "prodNos": ["心茶禮盒生產單_代開-20260910-3", "心茶禮盒生產單_代開-20260910-4"], "shipNos": [], "src": [{"prodNo": "心茶禮盒生產單_代開-20260910-3", "sku": "AA00337", "qty": 5, "custom": true, "customDesc": "婚展滿100盒贈送2盒／分享文贈送3盒", "earliest": "2026-11-05", "latest": "2026-11-07", "printed": "2026-10-27", "changeDate": "", "changeText": "", "orderNote": "第4梯11/7門市自取5盒單層茶包茶點款＋2盒單層茶點款", "mat": null, "matNote": [], "billedManual": "2026-10", "alerts": []}, {"prodNo": "心茶禮盒生產單_代開-20260910-4", "sku": "AA00338", "qty": 2, "custom": true, "customDesc": "客製化賀卡", "earliest": "2026-11-05", "latest": "2026-11-07", "printed": "2026-10-27", "changeDate": "2026-11-02", "changeText": "YY000069 換YY000070", "orderNote": "第4梯11/7門市自取5盒單層茶包茶點款＋2盒單層茶點款", "mat": null, "matNote": [], "billedManual": false, "alerts": [{"at": "2026-11-02", "text": "生產單 20260910-4 列印後有異動：YY000069 換YY000070"}]}], "lines": [{"sku": "AA00337", "name": "《禮盒.伴手禮》單層天韻禮盒_茶包・茶點組11入_綻花橙", "qty": 5}, {"sku": "AA00338", "name": "《禮盒.伴手禮》單層天韻禮盒_茶點款12入_綻花橙", "qty": 2}]}, "PO-0715": {"po": "PO-0715", "date": "2026-11-05", "customer": "喜餅＿江虹曄", "status": "open", "prodNos": ["心茶禮盒生產單_代開-20260910-11"], "shipNos": [], "src": [{"prodNo": "心茶禮盒生產單_代開-20260910-11", "sku": "AA00342", "qty": 18, "custom": true, "customDesc": "客製化賀卡", "earliest": "2026-11-05", "latest": "2026-11-07", "printed": "2026-10-27", "changeDate": "2026-11-02", "changeText": "YY000069 換YY000070", "orderNote": "第一梯10/23-22盒，雲林縣斗六市", "mat": null, "matNote": [], "billedManual": "2026-10", "alerts": [{"at": "2026-11-02", "text": "生產單 20260910-11 列印後有異動：YY000069 換YY000070"}]}], "lines": [{"sku": "AA00342", "name": "《禮盒.伴手禮》方韻松木禮盒_茶點款14入_綻花紅", "qty": 18}]}, "PO-0714": {"po": "PO-0714", "date": "2026-11-03", "customer": "喜餅＿潘向廣", "status": "open", "prodNos": ["心茶禮盒生產單_代開-20261006-3"], "shipNos": [], "src": [{"prodNo": "心茶禮盒生產單_代開-20261006-3", "sku": "AA00340", "qty": 91, "custom": true, "customDesc": "客製化賀卡", "earliest": "2026-11-05", "latest": "2026-11-06", "printed": "2026-10-27", "changeDate": "2026-10-27", "changeText": "客戶追加為91盒", "orderNote": "會館收件，13點以後送達", "mat": null, "matNote": [], "billedManual": "2026-10", "alerts": [{"at": "2026-10-27", "text": "生產單 20261006-3 列印後有異動：客戶追加為91盒"}]}], "lines": [{"sku": "AA00340", "name": "《禮盒.伴手禮》緞藏金匣禮盒_茶點款12入_綻花紅", "qty": 91}]}, "PO-0713": {"po": "PO-0713", "date": "2026-11-03", "customer": "上豪邁實業股份有限公司", "status": "open", "prodNos": ["心茶禮盒生產單_代開-20261021-1"], "shipNos": [], "src": [{"prodNo": "心茶禮盒生產單_代開-20261021-1", "sku": "AA00338", "qty": 64, "custom": false, "customDesc": "", "earliest": "2026-11-04", "latest": "2026-11-06", "printed": "2026-10-27", "changeDate": "2026-10-29", "changeText": "換71素面提袋", "orderNote": "指定要先開立電子發票，才能請款。", "mat": null, "matNote": [], "billedManual": "2026-10", "alerts": [{"at": "2026-10-29", "text": "生產單 20261021-1 列印後有異動：換71素面提袋"}]}], "lines": [{"sku": "AA00338", "name": "《禮盒.伴手禮》單層天韻禮盒_茶點款12入_綻花橙", "qty": 64}]}, "PO-0712": {"po": "PO-0712", "date": "2026-11-03", "customer": "喜餅＿簡怡凈", "status": "open", "prodNos": ["心茶禮盒生產單_代開-20261016-1"], "shipNos": [], "src": [{"prodNo": "心茶禮盒生產單_代開-20261016-1", "sku": "AA00344", "qty": 50, "custom": true, "customDesc": "客製化賀卡", "earliest": "2026-11-04", "latest": "2026-11-06", "printed": "2026-10-27", "changeDate": "", "changeText": "", "orderNote": "第1點20盒／新北市三峽區；第2點…", "mat": null, "matNote": [], "billedManual": "2026-10", "alerts": []}], "lines": [{"sku": "AA00344", "name": "《禮盒.伴手禮》紅燦金韻鐵盒_茶點款16入_綻花駝", "qty": 50}]}, "PO-0711": {"po": "PO-0711", "date": "2026-11-03", "customer": "喜餅＿陳欣苹", "status": "open", "prodNos": ["心茶禮盒生產單_代開-20261006-2"], "shipNos": [], "src": [{"prodNo": "心茶禮盒生產單_代開-20261006-2", "sku": "AA00342", "qty": 43, "custom": true, "customDesc": "客製化賀卡", "earliest": "2026-11-04", "latest": "2026-11-06", "printed": "2026-10-27", "changeDate": "", "changeText": "", "orderNote": "10/21~10/23第1點23盒，新竹市", "mat": null, "matNote": [], "billedManual": "2026-10", "alerts": []}], "lines": [{"sku": "AA00342", "name": "《禮盒.伴手禮》方韻松木禮盒_茶點款14入_綻花紅", "qty": 43}]}, "PO-0630": {"po": "PO-0630", "date": "2026-09-21", "customer": "喜餅＿許閔傑", "status": "done", "prodNos": ["心茶禮盒生產單_代開-20260824-4", "心茶禮盒生產單_代開-20260824-5"], "shipNos": [], "src": [{"prodNo": "心茶禮盒生產單_代開-20260824-4", "sku": "AA00344", "qty": 31, "custom": true, "customDesc": "客製化賀卡／客製化內容物", "earliest": "2026-09-22", "latest": "2026-09-24", "printed": "2026-09-15", "changeDate": "", "changeText": "", "orderNote": "婚展優惠滿100盒贈送2盒", "mat": null, "matNote": [], "billedManual": false, "alerts": []}, {"prodNo": "心茶禮盒生產單_代開-20260824-5", "sku": "AA00338", "qty": 27, "custom": true, "customDesc": "客製化賀卡／婚展滿100盒送2盒／分享文章送3盒", "earliest": "2026-09-22", "latest": "2026-09-24", "printed": "2026-09-15", "changeDate": "", "changeText": "", "orderNote": "婚展優惠滿100盒贈送2盒", "mat": null, "matNote": [], "billedManual": false, "alerts": []}], "lines": [{"sku": "AA00344", "name": "《禮盒.伴手禮》紅燦金韻鐵盒_茶點款16入_綻花駝", "qty": 31}, {"sku": "AA00338", "name": "《禮盒.伴手禮》單層天韻禮盒_茶點款12入_綻花橙", "qty": 27}], "done": {"date": "2026-09-21", "lines": [{"sku": "AA00344", "name": "《禮盒.伴手禮》紅燦金韻鐵盒_茶點款16入_綻花駝", "qty": 31}, {"sku": "AA00338", "name": "《禮盒.伴手禮》單層天韻禮盒_茶點款12入_綻花橙", "qty": 27}], "boxes": {"黑貓": 1, "LALA": 1, "A20": 1, "XXL": 1}, "handling": 4, "note": "", "by": "範例", "at": "2026-09-21T10:00:00Z"}}};
+
+boot();
+</script>
+</body>
+</html>
