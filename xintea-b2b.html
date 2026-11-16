@@ -109,7 +109,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-16-1';
+const APP_VERSION = 'v2026-11-16-2';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
@@ -305,6 +305,7 @@ async function openForm(poNo){
       ${swaps.length || notes.length ? `<dt>改料</dt><dd class="hl">${esc([...notes, ...swaps].join('；'))}</dd>` : ''}
       ${s.orderNote ? `<dt>訂單備註</dt><dd>${esc(s.orderNote)}</dd>` : ''}
       <dt>到貨</dt><dd>${esc(md(s.earliest))}～${esc(md(s.latest))}</dd>
+      ${s.madeSheet ? `<dt>大表已生產</dt><dd class="hl">${esc(s.madeSheet)}（已做好，請依紙本補回報，完成日填實際日期）</dd>` : ''}
       <dt>用料依據</dt><dd class="mut">${mt.from}${Object.keys(base).length && mt.from === 'BOM估算' ? '（生產單下載後會改用實際用料）' : ''}</dd>
     </dl></div>`;
   };
