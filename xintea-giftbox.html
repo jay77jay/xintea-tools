@@ -457,6 +457,22 @@
   .sys-bar.demo{background:var(--baseline-bg);color:var(--gold);border:1px solid var(--gold-soft);}
   .who{font-size:12px;color:var(--ink-soft);}
   body.locked .wrap > .card{display:none;}
+  /* 用料統計（核心程式與現場版「心茶 用料統計」共用） */
+  .st-hint{color:var(--ink-soft);font-size:12.5px;line-height:1.6;margin-bottom:10px;}
+  .st-h{font-size:15px;margin:22px 0 8px;color:var(--moss-dark);font-family:'Noto Serif TC',serif;}
+  .st-h4{font-size:14px;margin:18px 0 6px;}
+  .st-row{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:12px;}
+  .st-f{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--ink-soft);}
+  .st-f select,.st-f input,.mat-adv select,.mat-adv input,#mat-root textarea{padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;font-family:inherit;background:#fff;}
+  .st-note{padding:10px 12px;border-radius:8px;margin:10px 0;white-space:pre-line;font-size:13.5px;}
+  .st-note.ok{background:var(--green-pos-bg);color:var(--green-pos);} .st-note.warn{background:var(--baseline-bg);color:var(--gold);} .st-note.err{background:var(--rust-neg-bg);color:var(--rust-neg);}
+  table.st-t{border-collapse:collapse;width:100%;font-size:13px;margin-top:8px;min-width:0;}
+  .st-t th{background:var(--moss-dark);color:#fff;padding:8px 10px;font-weight:500;text-align:left;}
+  .st-t td{border-bottom:1px solid var(--line);padding:7px 10px;}
+  .st-t td.n,.st-t th.n{text-align:right;font-variant-numeric:tabular-nums;}
+  .st-scroll{overflow-x:auto;}
+  .mat-adv summary{cursor:pointer;font-weight:700;}
+
 </style>
 </head>
 <body>
@@ -750,6 +766,34 @@
     </div>
   </div>
 
+  <div class="card" id="mat-card">
+    <div class="toolbar">
+      <h2 style="margin:0;"><span class="num">11</span>用料統計（茶包／茶點）</h2>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button class="btn-ghost" id="toggle-mat-btn">顯示用料統計</button>
+      </div>
+    </div>
+    <div id="mat-body-wrap" style="display:none;">
+      <div class="hint" style="margin-bottom:6px;">只做用料計算。B2B 以「供應商參考號」含 B2B 判斷，其餘算 B2C。BOM 存在雲端，修改後所有人看到的都是同一份；現場版「心茶 用料統計」的 BOM 要同步時，從一邊下載 BOM、另一邊用「合併」上傳。</div>
+      <div id="mat-root"></div>
+      <details class="mat-adv" style="margin-top:26px;padding-top:16px;border-top:1px solid var(--line);">
+        <summary>進階：用料庫存與缺口（預備，盤點後再啟用）</summary>
+        <div class="st-hint" style="margin-top:8px;">用上面最後一次「計算用料」的結果當需求，跟這裡登記的庫存比較，算出缺口。不會自動扣料；盤點後用「設定盤點數」覆蓋，進貨用「入庫登記」累加（箱數 × 每箱數量 ＋ 散裝），在途不算。</div>
+        <div class="st-row" style="align-items:flex-end;">
+          <div class="st-f"><label>料號</label><input type="text" id="ms-code" list="ms-dl" style="width:150px;"></div>
+          <div class="st-f"><label>箱數</label><input type="number" id="ms-box" min="0" style="width:80px;"></div>
+          <div class="st-f"><label>每箱數量</label><input type="number" id="ms-per" min="0" style="width:90px;"></div>
+          <div class="st-f"><label>散裝</label><input type="number" id="ms-loose" min="0" style="width:80px;"></div>
+          <button class="btn-gold-ghost" id="ms-in">入庫登記（累加）</button>
+          <button class="btn-ghost" id="ms-set">設定盤點數（覆蓋）</button>
+        </div>
+        <datalist id="ms-dl"></datalist>
+        <div class="msg" id="ms-msg"></div>
+        <div id="ms-table"></div>
+      </details>
+    </div>
+  </div>
+
   <div id="modal-overlay" class="modal-overlay" style="display:none;">
     <div class="modal-box">
       <div class="modal-title" id="modal-title">同一天已經有上傳紀錄</div>
@@ -798,6 +842,9 @@
 <script>
 // ============================================================
 // 版本紀錄（每次有邏輯或功能異動，記得在這裡加一行＋更新 APP_VERSION）
+// v1.19.0（2026-11-16）：補回「用料統計」（卡片11）：採購單彙出檔依日期區間／B2B、B2C 算茶包茶點用量、手動輸入禮盒盒數、
+//                        BOM 管理（新增/修改/刪除/整批上傳合併或取代/下載/還原內建）。核心程式直接沿用現場版「心茶 用料統計」，
+//                        BOM 存雲端（xintea_giftbox/xincha-stat-bom）。進階：用料庫存（入庫累加／盤點覆蓋）與缺口，收合預備
 // v1.18.0（2026-11-16）：改放 GitHub Pages（jay77jay.github.io/xintea-tools/xintea-giftbox.html），資料存 Firestore
 //                        （xintea_giftbox、xintea_giftbox_snaps），需 Google 登入；快照明細切塊存放。讀取失敗時鎖住畫面並顯示紅色提示，
 //                        不會把「讀不到」當成「沒有資料」。從其他地方開啟（例如本機檔案）＝試用模式，資料存瀏覽器
@@ -938,7 +985,7 @@
 //                        忽略原因下拉選單、紅框警示掃描全部歷史快照
 // v1.0.0：初始版本（新增/異動/刪除/結案判斷、均茂排除、SG採購單匯出、全品項健康檢查）
 // ============================================================
-const APP_VERSION = 'v1.18.0';
+const APP_VERSION = 'v1.19.0';
 const APP_VERSION_DATE = '2026-11-16';
 console.log(`心茶 出貨 禮盒製作每日增加數 ${APP_VERSION}（${APP_VERSION_DATE}）`);
 
@@ -3729,7 +3776,10 @@ document.getElementById('backup-btn').addEventListener('click', () => {
     warehouseReceivedTotal,
     dismissedVanishedOrders,
     recordedLog,
-    exportedPairs
+    exportedPairs,
+    matBom,
+    matStock,
+    matStockLog
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
@@ -3792,6 +3842,10 @@ document.getElementById('restore-input').addEventListener('change', async (e) =>
     dismissedVanishedOrders = incomingDismissedVanishedOrders;
     recordedLog = incomingRecordedLog;
     exportedPairs = incomingExportedPairs;
+    if (payload && payload.matBom && payload.matBom.boms){ matBom = payload.matBom; await storageSet(MAT_BOM_KEY, JSON.stringify(matBom)); }
+    if (payload && payload.matStock){ matStock = payload.matStock; await storageSet(MAT_STOCK_KEY, JSON.stringify(matStock)); }
+    if (payload && Array.isArray(payload.matStockLog)){ matStockLog = payload.matStockLog; await storageSet(MAT_STOCK_LOG_KEY, JSON.stringify(matStockLog)); }
+    if (matUi){ matUi.renderBom(); matUi.render(); renderMatStock(); }
     const saved = await saveSnapshots();
     await saveExcessStock();
     await saveDismissedAlerts();
@@ -3811,6 +3865,387 @@ document.getElementById('restore-input').addEventListener('change', async (e) =>
   }
 });
 
+
+// ---------- 用料統計（v1.19.0；核心 createStatsUi 與現場版「心茶 用料統計」同一份） ----------
+const DEFAULT_BOM = {"v":1,"date":"2026-11-02","materials":{"YY000061":{"name":"金萱馥郁茶花曲奇","cat":"茶餅"},"YY000062":{"name":"阿薩姆果醬曲奇","cat":"茶餅"},"YY000063":{"name":"包種烏龍戀人餅","cat":"茶餅"},"YY000064":{"name":"脆杏仁莓果紅玉茶餅","cat":"茶餅"},"YY000066":{"name":"金箔町焙三明治餅(新名:極上焙茶三明治餅)","cat":"茶餅"},"YY000069":{"name":"蛋捲_鐵觀音+奇亞籽","cat":"蛋捲"},"YY000070":{"name":"蛋捲_包種烏龍+紅藜","cat":"蛋捲"},"YY000068":{"name":"阿薩姆奶茶夾心餅","cat":"茶餅"},"YY000087":{"name":"覆盆子紅烏龍雪球","cat":"茶餅"},"YY000086":{"name":"蝴蝶酥_蜜香綠茶","cat":"酥類"},"YY000085":{"name":"蝴蝶酥_果香紅玉","cat":"酥類"},"YY000067":{"name":"金萱鐵觀音雙茶夾心","cat":"茶餅"},"1040004":{"name":"阿薩姆奶茶夾心餅(舊版料號)","cat":"茶餅"},"1040005":{"name":"金箔町焙三明治餅(舊版料號)","cat":"茶餅"},"Y000002":{"name":"京番茶圓翠球餅(舊版料號,2入一組)","cat":"茶餅"},"YY000036":{"name":"金萱鐵觀音雙茶夾心(舊版料號)","cat":"茶餅"},"YY000046":{"name":"脆杏仁莓果紅玉茶餅(舊版料號)","cat":"茶餅"},"YY000047":{"name":"包種烏龍戀人餅(舊版料號)","cat":"茶餅"},"YY000048":{"name":"金萱馥郁茶花曲奇(舊版料號)","cat":"茶餅"},"YY000049":{"name":"阿薩姆果醬曲奇(舊版料號)","cat":"茶餅"},"YY000044":{"name":"蛋捲_鐵觀音+奇亞籽(舊版料號)","cat":"蛋捲"},"YY000045":{"name":"蛋捲_包種烏龍+紅藜(舊版料號)","cat":"蛋捲"},"YY000057":{"name":"菓糖爆米花_紅烏龍(CandyPoppy)","cat":"爆米花"},"YY000059":{"name":"蜜焙堅果_鐵觀音(可夫萊)","cat":"堅果"},"YY000065":{"name":"京番茶圓翠球餅(2入裝)","cat":"茶餅"},"YY000078":{"name":"金萱金桔檸檬酥","cat":"酥類"},"YY000080":{"name":"鐵觀音香橙燕麥餅","cat":"茶餅"},"Y010003":{"name":"3g茶包_日月潭紅玉_古銅金","cat":"茶包"},"Y010004":{"name":"3g茶包_阿薩姆紅茶_古銅金","cat":"茶包"},"1010009":{"name":"3g茶包_清香四季春_香檳金","cat":"茶包"},"1010012":{"name":"3g茶包_清香金萱茶_香檳金","cat":"茶包"},"YY000060":{"name":"蜜焙堅果_阿薩姆紅茶(可夫萊)","cat":"堅果"},"YY000079":{"name":"紅玉金鑽鳳梨酥","cat":"酥類"},"Y010011":{"name":"3g茶包_鐵觀音紅茶_古銅金","cat":"茶包"},"1010011":{"name":"3g茶包_輕焙烏龍茶","cat":"茶包"},"Y010007":{"name":"3g茶包_花蓮蜜香紅_古銅金","cat":"茶包"},"YY000089":{"name":"3g茶包_花蓮蜜香包種茶","cat":"茶包"},"YY000088":{"name":"3g茶包_花蓮蜜香烏龍茶","cat":"茶包"},"YY000090":{"name":"3g茶包_花蓮蜜香貴妃烏龍茶","cat":"茶包"},"1010010":{"name":"3g茶包_台灣翠玉茶","cat":"茶包"},"1010013":{"name":"3g茶包_正欉鐵觀音_香檳金","cat":"茶包"},"1010014":{"name":"3g茶包_和束町焙茶_香檳金","cat":"茶包"},"1010015":{"name":"3g茶包_京都京番茶_香檳金","cat":"茶包"},"YY000054":{"name":"3g茶包_炭焙烏龍茶_香檳金","cat":"茶包"},"Y010005":{"name":"3g茶包_日月潭紅韻_古銅金","cat":"茶包"},"Y010006":{"name":"3g茶包_蜜香山紅茶_古銅金","cat":"茶包"},"1010019":{"name":"3g茶包_蜜香紅烏龍_香檳金","cat":"茶包"},"1010020":{"name":"3g茶包_瑞穗蜜香綠_香檳金","cat":"茶包"},"YY000083":{"name":"蛋黃酥_蜜香綠茶_白芝麻","cat":"酥類"},"YY000084":{"name":"蛋黃酥_甜香紅玉_黑芝麻","cat":"酥類"},"YY000058":{"name":"菓糖爆米花(YY000058款)","cat":"爆米花"},"1100033":{"name":"散茶半成品_花蓮蜜香烏龍茶_75g","cat":"散茶"},"1100032":{"name":"散茶半成品_花蓮蜜香紅茶_75g","cat":"散茶"}},"boms":{"AA00338":{"name":"單層天韻禮盒_茶點款12入","src":"B2B/B2C","items":{"YY000061":1,"YY000062":1,"YY000063":1,"YY000064":1,"YY000066":1,"YY000069":1,"YY000070":1,"YY000068":1,"YY000087":1,"YY000086":1,"YY000085":1,"YY000067":1}},"AA00340":{"name":"緞藏金匣禮盒_茶點款12入","src":"B2B/B2C","items":{"YY000061":1,"YY000062":1,"YY000063":1,"YY000064":1,"YY000066":1,"YY000069":1,"YY000070":1,"YY000068":1,"YY000087":1,"YY000086":1,"YY000085":1,"YY000067":1}},"AA00163":{"name":"新年2025雙層燙金禮盒_茶餅20x蛋捲4","src":"B2B/B2C","items":{"1040004":1,"1040005":1,"Y000002":1,"YY000036":1,"YY000046":4,"YY000047":4,"YY000048":4,"YY000049":4,"YY000044":2,"YY000045":2}},"AA00173":{"name":"常銷天地禮盒_茶餅14x蛋捲3","src":"B2B/B2C","items":{"1040004":1,"1040005":1,"Y000002":1,"YY000036":1,"YY000046":2,"YY000047":2,"YY000048":3,"YY000049":3,"YY000044":1,"YY000045":2}},"AA00242":{"name":"新年2026單層抽屜禮盒","src":"B2B","items":{"YY000057":1,"YY000059":1,"YY000061":2,"YY000062":1,"YY000064":1,"YY000065":1,"YY000066":1,"YY000069":1,"YY000070":1,"YY000078":1,"YY000080":1}},"AA00245":{"name":"新年2026天地蓋正方松木禮盒","src":"B2B/B2C","items":{"Y010003":1,"Y010004":1,"1010009":1,"1010012":1,"YY000057":1,"YY000059":1,"YY000061":2,"YY000062":1,"YY000064":1,"YY000070":1,"YY000078":1,"YY000080":1}},"AA00246":{"name":"新年2026紅色鐵盒_無茶包","src":"B2B","items":{"YY000057":1,"YY000060":1,"YY000061":2,"YY000062":1,"YY000064":1,"YY000065":1,"YY000067":1,"YY000069":1,"YY000070":1,"YY000078":2,"YY000079":2,"YY000080":2}},"AA00247":{"name":"新年2026紅色鐵盒_含茶包","src":"B2B","items":{"Y010003":1,"Y010004":1,"1010009":1,"1010012":1,"YY000057":1,"YY000060":1,"YY000061":2,"YY000062":2,"YY000064":2,"YY000069":1,"YY000070":1,"YY000078":1,"YY000079":1,"YY000080":2}},"AA00249":{"name":"新年2026雙層天蓋禮盒","src":"B2B","items":{"Y010003":2,"Y010004":1,"Y010011":1,"1010012":2,"1010011":1,"1010009":1,"YY000061":2,"YY000062":2,"YY000064":1,"YY000065":1,"YY000066":1,"YY000067":1,"YY000060":1,"YY000057":1,"YY000069":1,"YY000070":1,"YY000080":1,"YY000078":1}},"AA00333":{"name":"緞帶喜茶禮盒_爆米花款2入","src":"B2B","items":{"YY000057":2}},"AA00334":{"name":"緞帶喜茶禮盒_茶包款4入","src":"B2B","items":{"Y010007":1,"YY000089":1,"YY000088":1,"YY000090":1}},"AA00335":{"name":"輕饗茶趣禮盒_茶包茶點組10入","src":"B2B/B2C","items":{"Y010007":1,"YY000088":1,"YY000090":1,"YY000089":1,"YY000061":1,"YY000062":1,"YY000063":1,"YY000064":1,"YY000068":1,"YY000087":1}},"AA00337":{"name":"單層天韻禮盒_茶包茶點組11入","src":"B2B","items":{"Y010007":2,"YY000088":1,"YY000090":1,"YY000089":1,"YY000061":1,"YY000063":1,"YY000070":1,"YY000087":1,"YY000068":1,"YY000085":1}},"AA00341":{"name":"方韻松木禮盒_茶包茶點組12入","src":"B2B/B2C","items":{"Y010007":1,"YY000088":1,"YY000089":1,"YY000090":1,"YY000061":1,"YY000063":1,"YY000070":1,"YY000087":1,"YY000068":1,"YY000086":1,"YY000085":1,"YY000067":1}},"AA00342":{"name":"方韻松木禮盒_茶點款14入","src":"B2B","items":{"YY000061":1,"YY000062":1,"YY000063":1,"YY000064":1,"YY000068":1,"YY000070":1,"YY000069":1,"YY000067":1,"YY000066":1,"YY000087":1,"YY000086":2,"YY000085":2}},"AA00344":{"name":"紅燦金韻鐵盒_茶點款16入","src":"B2B","items":{"YY000061":1,"YY000062":1,"YY000063":1,"YY000064":1,"YY000067":1,"YY000066":1,"YY000068":1,"YY000087":1,"YY000069":1,"YY000070":1,"YY000078":1,"YY000079":1,"YY000086":2,"YY000085":2}},"AA00345":{"name":"雙層天韻禮盒_茶包茶點組22入","src":"B2B","items":{"YY000061":1,"YY000062":1,"YY000063":1,"YY000064":1,"YY000066":1,"YY000067":1,"YY000069":1,"YY000070":1,"YY000068":1,"YY000087":1,"YY000086":1,"YY000085":1,"Y010007":3,"YY000088":3,"YY000090":2,"YY000089":2}},"AA00062":{"name":"喜餅禮盒_迷你緞帶盒_純茶包2入","src":"B2C","items":{"Y010003":1,"1010012":1}},"A050010":{"name":"濃茶系甜點_黃Pizza盒_日月潭紅茶_9入","src":"B2C","items":{"YY000064":6,"YY000068":3}},"A050011":{"name":"濃茶系甜點_黃Pizza盒_職人焙烤茶_6入","src":"B2C","items":{"YY000065":3,"YY000066":3}},"A050013":{"name":"濃茶系甜點_黃Pizza盒_恬雅清香茶_12入","src":"B2C","items":{"YY000061":6,"YY000063":6}},"AA00339":{"name":"緞藏金匣禮盒_茶包茶點組13入","src":"B2C","items":{"Y010007":1,"YY000088":1,"YY000090":1,"YY000089":1,"YY000061":1,"YY000063":1,"YY000069":1,"YY000070":1,"YY000087":1,"YY000068":1,"YY000067":1,"YY000086":1,"YY000085":1}},"AA00160":{"name":"新年2025雙層燙金禮盒_22入(含茶包10)","src":"B2C","items":{"1010009":2,"1010012":2,"Y010003":2,"Y010004":2,"Y010011":2,"YY000044":1,"YY000045":1,"YY000046":2,"YY000047":2,"YY000048":2,"YY000049":2,"Y000002":1,"1040005":1}},"AA00240":{"name":"新年2026單層天蓋禮盒_茶餅10x蛋捲2","src":"B2C","items":{"YY000061":2,"YY000062":2,"YY000064":2,"YY000065":1,"YY000066":1,"YY000069":1,"YY000070":1,"YY000080":2}},"AA00241":{"name":"新年2026單層天蓋禮盒_茶餅6x蛋捲1x茶包5","src":"B2C","items":{"1010012":2,"Y010003":2,"Y010011":1,"YY000061":2,"YY000062":2,"YY000064":1,"YY000070":1,"YY000080":1}},"AA00134":{"name":"常銷黃Pizza盒_茶餅8","src":"B2C","items":{"1040004":1,"Y000002":1,"YY000049":2,"YY000048":2,"YY000036":1,"1040005":1}},"AA00279":{"name":"茶包盒_台灣茶之青12入","src":"B2C","items":{"1010009":3,"1010010":3,"1010011":3,"1010012":3}},"A010054":{"name":"常銷迷你緞帶盒_純茶包4入","src":"B2C","items":{"1010009":1,"1010012":1,"Y010003":1,"Y010004":1}},"A020012":{"name":"低咖啡因焙茶 綜合茶包4入","src":"B2C","items":{"1010013":1,"1010014":1,"1010015":1,"YY000054":1}},"A020010":{"name":"茶主題綜合茶包_日月潭紅茶4入","src":"B2C","items":{"Y010003":1,"Y010004":1,"Y010005":1,"Y010006":1}},"A020011":{"name":"茶主題綜合茶包_蜜香風味選4入","src":"B2C","items":{"Y010006":1,"Y010007":1,"1010019":1,"1010020":1}},"A020013":{"name":"茶主題綜合茶包_台灣茶之青4入","src":"B2C","items":{"1010009":1,"1010010":1,"1010011":1,"1010012":1}},"A020014":{"name":"茶主題綜合茶包_鮮奶茶專門4入","src":"B2C","items":{"Y010003":1,"Y010004":1,"1010013":1,"1010014":1}},"AA00286":{"name":"單品茶包_日月潭紅韻15入","src":"B2C","items":{"Y010005":15}},"AA00289":{"name":"單品茶包_清香金萱茶15入","src":"B2C","items":{"1010012":15}},"AA00290":{"name":"單品茶包_清香四季春15入","src":"B2C","items":{"1010009":15}},"B020001":{"name":"探索系列綜合茶包4入組(=A020010~A020014 五款4入組各1盒)","src":"B2C","items":{"Y010003":2,"Y010004":2,"Y010005":1,"Y010006":2,"Y010007":1,"1010019":1,"1010020":1,"1010013":2,"1010014":2,"1010015":1,"YY000054":1,"1010009":1,"1010010":1,"1010011":1,"1010012":1}},"AA00308":{"name":"中秋2026長韻松木禮盒_茶包茶點組18入","src":"B2B","items":{"YY000088":1,"Y010007":1,"YY000089":1,"YY000090":1,"YY000083":1,"YY000084":1,"YY000063":1,"YY000066":1,"YY000068":1,"YY000061":1,"YY000062":1,"YY000064":1,"YY000087":1,"YY000067":1,"YY000069":2,"YY000070":2}},"AA00309":{"name":"中秋2026長韻松木禮盒_茶點款19入","src":"B2B","items":{"YY000085":1,"YY000086":1,"YY000078":3,"YY000083":1,"YY000084":1,"YY000069":2,"YY000070":2,"YY000063":1,"YY000066":1,"YY000068":1,"YY000061":1,"YY000062":1,"YY000064":1,"YY000087":1,"YY000067":1}},"AA00252":{"name":"新年2026長方松木盒_30cm","src":"B2B","items":{"Y010003":1,"Y010004":1,"Y010011":1,"1010009":1,"1010012":1,"YY000061":2,"YY000062":2,"YY000064":2,"YY000065":1,"YY000067":1,"YY000058":1,"YY000059":1,"YY000060":1,"YY000069":1,"YY000070":1,"YY000078":2,"YY000079":2,"YY000080":2}},"AA00316":{"name":"中秋2026方韻松木禮盒_茶葉罐款2入","src":"B2B","items":{"1100033":1,"1100032":1}}}};
+function _unusedReadXlsxRows(file){
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = e => { try { const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'}); resolve(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, defval:null})); } catch(err){ reject(err); } };
+    r.onerror = () => reject(new Error('讀取檔案失敗'));
+    r.readAsArrayBuffer(file);
+  });
+}
+function matDateStr(v){
+  if (v === null || v === undefined || v === '') return '';
+  if (v instanceof Date && !isNaN(v)){ const p = n => String(n).padStart(2, '0'); return `${v.getFullYear()}-${p(v.getMonth() + 1)}-${p(v.getDate())}`; }
+  if (typeof v === 'number' && v > 20000 && v < 80000){ const d = new Date(Math.round((v - 25569) * 86400000)); return d.toISOString().slice(0, 10); } // Excel 序號
+  const m = String(v).match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+  return m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : '';
+}
+async function matParsePoFile(file){
+  const aoa = await readXlsxRows(file);
+  if (!aoa.length) throw new Error('檔案是空的');
+  const h = aoa[0].map(x => String(x || '').trim());
+  const iPo = h.indexOf('採購單編號'), iRef = h.indexOf('供應商參考號'), iDate = h.indexOf('採購日期'), iEta = h.indexOf('預計日期');
+  const iSku = h.indexOf('庫存SKU'), iQty = h.indexOf('數量'), iRecv = h.indexOf('已收貨');
+  if (iPo === -1 || iSku === -1 || iQty === -1 || iRecv === -1) throw new Error('檔案裡找不到「採購單編號」「庫存SKU」「數量」「已收貨」欄位，請確認是採購單彙出檔');
+  const pos = {};
+  let cur = null, bad = 0;
+  for (let i = 1; i < aoa.length; i++){
+    const r = aoa[i];
+    if (r[iPo]){
+      cur = String(r[iPo]).trim();
+      if (!pos[cur]){
+        const ref = iRef !== -1 && r[iRef] ? String(r[iRef]).trim() : '';
+        pos[cur] = {ref, ch: /B2B/i.test(ref) ? 'B2B' : 'B2C', date: iDate !== -1 ? matDateStr(r[iDate]) : '', eta: iEta !== -1 ? matDateStr(r[iEta]) : '', lines: {}};
+      }
+    }
+    const sku = r[iSku] ? String(r[iSku]).trim().toUpperCase() : '';
+    if (!sku || !cur) continue;
+    const qty = Number(r[iQty]), recv = Number(r[iRecv]);
+    if (isNaN(qty) || isNaN(recv)){ bad++; continue; }
+    const l = pos[cur].lines[sku] || (pos[cur].lines[sku] = {qty: 0, recv: 0});
+    l.qty += qty; l.recv += recv;
+  }
+  Object.keys(pos).forEach(k => { if (!Object.keys(pos[k].lines).length) delete pos[k]; });
+  return {pos, bad};
+}
+
+// ===== 用料統計核心（兩支程式共用同一份）=====
+// opts: {root, defaultBom, getBom(), setBom(bom)->Promise<bool>, getPosFileParser(file)->{pos}, readRows(file), saveXlsx(wb,name), confirm(msg)->Promise<bool>, today()}
+function createStatsUi(opts){
+  const root = opts.root;
+  const esc = s => String(s === null || s === undefined ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const num = n => (Math.round(n * 100) / 100).toLocaleString('en-US');
+  const S = {pos: null, mode: null, manual: [], last: null, edit: null};
+  root.innerHTML = `
+  <div class="st-msg" data-r="msg"></div>
+  <h3 class="st-h">方式一：上傳採購單彙出檔，算某段時間需要的用料</h3>
+  <div class="st-row"><div class="st-f" style="flex:1;"><label>採購單彙出檔（.xlsx，B2B、B2C 一起）</label><input type="file" data-r="pofile" accept=".xlsx,.xls"></div></div>
+  <div data-r="ctl" style="display:none;"><div class="st-row">
+    <div class="st-f"><label>依哪個日期</label><select data-r="dm"><option value="date">採購日期</option><option value="eta">預計日期</option></select></div>
+    <div class="st-f"><label>從</label><input type="date" data-r="from"></div>
+    <div class="st-f"><label>到</label><input type="date" data-r="to"></div>
+    <div class="st-f"><label>數量算法</label><select data-r="qm"><option value="all">採購單全部數量</option><option value="remain">只算還沒收貨的（數量－已收貨）</option></select></div>
+    <div class="st-f"><label>通路</label><div style="padding:8px 0;"><label><input type="checkbox" data-r="b2b" checked> B2B</label> &nbsp; <label><input type="checkbox" data-r="b2c" checked> B2C</label></div></div>
+  </div></div>
+  <h3 class="st-h">方式二：手動輸入禮盒編號與盒數（可一次貼很多行）</h3>
+  <div class="st-hint">一行一個禮盒：「禮盒編號 盒數」，中間用空白、Tab、逗號或冒號隔開都可以。可以直接從 Excel 兩欄複製貼上。同一個編號出現多次會加總。</div>
+  <textarea data-r="manual" rows="6" style="width:100%;box-sizing:border-box;font-family:monospace;" placeholder="AA00338 50&#10;AA00345 20&#10;A010054, 100"></textarea>
+  <div style="margin:8px 0 4px;"><button class="btn-primary" data-r="manual-go">計算用料</button></div>
+  <div data-r="res"></div>
+  <details class="st-bomwrap" style="margin-top:22px;"><summary style="cursor:pointer;font-weight:700;">禮盒 BOM 管理（新增品項、修改、整批上傳）</summary>
+    <div class="st-hint" style="margin-top:8px;">BOM＝每個禮盒用到哪些茶包／茶點、每盒幾個。有新品項時，在這裡手動建立，或把整份 BOM 的 Excel 上傳。</div>
+    <div class="st-row" style="align-items:flex-end;">
+      <button class="btn-ghost" data-r="bom-dl">下載目前 BOM（Excel，也是上傳範本）</button>
+      <div class="st-f"><label>上傳 BOM（Excel）</label><input type="file" data-r="bom-file" accept=".xlsx,.xls"></div>
+      <div class="st-f"><label>上傳方式</label><select data-r="bom-mode"><option value="merge">合併（同禮盒料號以檔案為準，其他保留）</option><option value="replace">取代全部</option></select></div>
+      <button class="btn-ghost" data-r="bom-reset">還原內建 BOM</button>
+    </div>
+    <h4 class="st-h4">新增／修改單一禮盒</h4>
+    <div class="st-row"><div class="st-f"><label>禮盒料號</label><input type="text" data-r="e-sku" placeholder="例如 AA00350"></div><div class="st-f" style="flex:1;"><label>禮盒品名</label><input type="text" data-r="e-name" style="width:100%;"></div></div>
+    <div data-r="e-items"></div>
+    <div style="margin:8px 0;"><button class="btn-ghost" data-r="e-add">＋新增一種料</button> <button class="btn-primary" data-r="e-save">儲存這個禮盒</button> <button class="btn-ghost" data-r="e-clear">清空表單</button></div>
+    <datalist data-r="dl-mat"></datalist>
+    <div class="st-scroll" data-r="bom-list"></div>
+  </details>`;
+  const q = k => root.querySelector(`[data-r="${k}"]`);
+  const say = (t, k) => { q('msg').innerHTML = t ? `<div class="st-note ${k || 'ok'}">${esc(t)}</div>` : ''; };
+  const bom = () => opts.getBom();
+
+  // ---- 計算 ----
+  function compute(lines){ // lines: [{sku,ch,qty}]
+    const B = bom(), need = {}, boxes = {}, nobom = {};
+    lines.forEach(({sku, ch, qty}) => {
+      const b = B.boms[sku];
+      if (!b){ (nobom[sku] = nobom[sku] || {B2B:0,B2C:0,M:0})[ch] += qty; return; }
+      (boxes[sku] = boxes[sku] || {B2B:0,B2C:0,M:0})[ch] += qty;
+      Object.entries(b.items).forEach(([c, per]) => { (need[c] = need[c] || {B2B:0,B2C:0,M:0})[ch] += qty * per; });
+    });
+    const rows = Object.entries(need).map(([c, n]) => { const m = B.materials[c] || {name:c, cat:''}; return {code:c, name:m.name, cat:m.cat||'', b2b:n.B2B, b2c:n.B2C, total:n.B2B+n.B2C+n.M}; })
+      .sort((a, b) => a.cat.localeCompare(b.cat) || a.code.localeCompare(b.code));
+    const boxRows = Object.entries(boxes).map(([s, n]) => ({sku:s, name:(B.boms[s]||{}).name||'', b2b:n.B2B, b2c:n.B2C, total:n.B2B+n.B2C+n.M})).sort((a, b) => b.total - a.total);
+    return {rows, boxRows, nobom};
+  }
+  function poLines(){
+    const mode = q('dm').value, from = q('from').value, to = q('to').value, qm = q('qm').value;
+    const useB2B = q('b2b').checked, useB2C = q('b2c').checked;
+    const lines = [], used = []; let nodate = 0;
+    Object.entries(S.pos).forEach(([po, p]) => {
+      const d = mode === 'eta' ? p.eta : p.date;
+      if (!d){ nodate++; return; }
+      if ((from && d < from) || (to && d > to)) return;
+      if (p.ch === 'B2B' ? !useB2B : !useB2C) return;
+      let cnt = 0;
+      Object.entries(p.lines).forEach(([sku, l]) => {
+        const n = qm === 'remain' ? Math.max(0, l.qty - l.recv) : l.qty;
+        if (n <= 0) return;
+        cnt += n; lines.push({sku, ch: p.ch, qty: n});
+      });
+      used.push({po, ch: p.ch, date: d, ref: p.ref, boxes: cnt});
+    });
+    return {lines, used, nodate};
+  }
+  function render(){
+    const el = q('res');
+    if (!S.mode){ el.innerHTML = ''; return; }
+    let lines, used = [], nodate = 0;
+    if (S.mode === 'po'){ ({lines, used, nodate} = poLines()); } else { lines = S.manual; }
+    const r = compute(lines), po = S.mode === 'po';
+    S.last = {rows: r.rows, boxRows: r.boxRows, used, po};
+    const nb = Object.entries(r.nobom);
+    const totalBoxes = r.boxRows.reduce((s, x) => s + x.total, 0);
+    const head = po ? `區間內共 ${used.length} 張採購單、${totalBoxes} 盒；用到 ${r.rows.length} 種料。` : `共 ${r.boxRows.length} 款禮盒、${totalBoxes} 盒；用到 ${r.rows.length} 種料。`;
+    let h = `<div class="st-note ${nb.length ? 'warn' : 'ok'}">${esc(head
+      + (nodate ? `\n有 ${nodate} 張採購單沒有這個日期，沒有納入。` : '')
+      + (nb.length ? `\n以下禮盒不在 BOM 裡，用料沒有算進去（可到下方「BOM 管理」新增）：${nb.map(([s, v]) => s + '（' + (v.B2B + v.B2C + v.M) + '盒）').join('、')}` : ''))}</div>`;
+    if (r.rows.length){
+      const cols = po ? '<th class="n">B2B</th><th class="n">B2C</th>' : '';
+      h += `<div style="margin:8px 0;"><button class="btn-primary" data-r="ex">下載 Excel</button></div><div class="st-scroll"><table class="warehouse-table st-t"><thead><tr><th>料號</th><th>料名</th><th>類別</th>${cols}<th class="n">合計</th></tr></thead><tbody>`
+        + r.rows.map(x => `<tr><td>${esc(x.code)}</td><td>${esc(x.name)}</td><td>${esc(x.cat)}</td>${po ? `<td class="n">${num(x.b2b)}</td><td class="n">${num(x.b2c)}</td>` : ''}<td class="n"><b>${num(x.total)}</b></td></tr>`).join('')
+        + `</tbody></table></div><details style="margin-top:12px;"><summary style="cursor:pointer;font-weight:700;">各禮盒盒數（${r.boxRows.length} 款）</summary><div class="st-scroll"><table class="warehouse-table st-t"><thead><tr><th>禮盒料號</th><th>品名</th>${cols}<th class="n">合計</th></tr></thead><tbody>`
+        + r.boxRows.map(x => `<tr><td>${esc(x.sku)}</td><td>${esc(x.name)}</td>${po ? `<td class="n">${x.b2b}</td><td class="n">${x.b2c}</td>` : ''}<td class="n"><b>${x.total}</b></td></tr>`).join('') + '</tbody></table></div></details>';
+    }
+    el.innerHTML = h;
+    const ex = q('ex');
+    if (ex) ex.onclick = async () => {
+      const L = S.last, wb = XLSX.utils.book_new();
+      const a1 = [L.po ? ['料號','料名','類別','B2B','B2C','合計'] : ['料號','料名','類別','合計']];
+      L.rows.forEach(x => a1.push(L.po ? [x.code,x.name,x.cat,x.b2b,x.b2c,x.total] : [x.code,x.name,x.cat,x.total]));
+      const a2 = [L.po ? ['禮盒料號','品名','B2B盒數','B2C盒數','合計'] : ['禮盒料號','品名','盒數']];
+      L.boxRows.forEach(x => a2.push(L.po ? [x.sku,x.name,x.b2b,x.b2c,x.total] : [x.sku,x.name,x.total]));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(a1), '用料');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(a2), '禮盒');
+      if (L.po){ const a3 = [['採購單','通路','日期','供應商參考號','盒數']]; L.used.forEach(x => a3.push([x.po,x.ch,x.date,x.ref,x.boxes])); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(a3), '採購單明細'); }
+      const nm = L.po ? `用料統計_${q('from').value || '起'}_${q('to').value || '迄'}.xlsx` : `用料統計_手動輸入_${opts.today()}.xlsx`;
+      await opts.saveXlsx(wb, nm);
+    };
+  }
+
+  // ---- 方式一 ----
+  q('pofile').addEventListener('change', async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try {
+      const {pos} = await opts.parsePoFile(f);
+      if (!Object.keys(pos).length) throw new Error('檔案裡沒有任何採購單品項');
+      S.pos = pos; S.mode = 'po';
+      const ds = Object.values(pos).map(p => p.date).filter(Boolean).sort();
+      if (ds.length){ q('from').value = ds[0]; q('to').value = ds[ds.length - 1]; }
+      q('ctl').style.display = '';
+      say(`已讀入 ${Object.keys(pos).length} 張採購單，請選日期區間。`, 'ok'); render();
+    } catch(err){ S.pos = null; if (S.mode === 'po') S.mode = null; q('ctl').style.display = 'none'; render(); say('解析失敗：' + err.message, 'err'); }
+  });
+  ['dm','from','to','qm','b2b','b2c'].forEach(k => q(k).addEventListener('change', () => { if (S.pos){ S.mode = 'po'; render(); } }));
+
+  // ---- 方式二 ----
+  q('manual-go').addEventListener('click', () => {
+    const agg = {}, bad = [];
+    q('manual').value.split(/\r?\n/).forEach(line => {
+      const t = line.trim(); if (!t) return;
+      const m = t.match(/^([A-Za-z0-9_\-]+)[\s,，;；:：=xX×*\t]+(\d+(?:\.\d+)?)$/);
+      if (!m){ bad.push(t); return; }
+      const sku = m[1].toUpperCase(); agg[sku] = (agg[sku] || 0) + Number(m[2]);
+    });
+    S.manual = Object.entries(agg).map(([sku, qty]) => ({sku, ch: 'M', qty}));
+    if (!S.manual.length){ say(bad.length ? '看不懂這些行，格式要像「AA00338 50」：' + bad.slice(0, 5).join(' ／ ') : '請先輸入禮盒編號與盒數。', 'err'); return; }
+    S.mode = 'manual'; say(bad.length ? `有 ${bad.length} 行看不懂，已略過：${bad.slice(0, 5).join(' ／ ')}` : '', 'warn'); render();
+  });
+
+  // ---- BOM 管理 ----
+  function renderBom(){
+    const B = bom();
+    q('dl-mat').innerHTML = Object.entries(B.materials).map(([c, m]) => `<option value="${esc(c)}">${esc(m.name)}</option>`).join('');
+    const ids = Object.keys(B.boms).sort();
+    q('bom-list').innerHTML = `<div class="st-hint" style="margin-top:12px;">目前共 ${ids.length} 個禮盒。</div><table class="warehouse-table st-t"><thead><tr><th>禮盒料號</th><th>品名</th><th>用料</th><th></th></tr></thead><tbody>`
+      + ids.map(s => { const b = B.boms[s]; return `<tr><td>${esc(s)}</td><td>${esc(b.name)}</td><td style="font-size:12px;">${Object.entries(b.items).map(([c, n]) => esc((B.materials[c] || {name: c}).name) + '×' + n).join('、')}</td><td style="white-space:nowrap;"><button class="btn-ghost" data-edit="${esc(s)}">編輯</button> <button class="btn-ghost" data-del="${esc(s)}">刪除</button></td></tr>`; }).join('')
+      + '</tbody></table>';
+  }
+  function renderForm(){
+    const e = S.edit;
+    q('e-sku').value = e.sku; q('e-name').value = e.name;
+    q('e-items').innerHTML = `<table class="warehouse-table st-t"><thead><tr><th>料號（可選現有，或輸入新的）</th><th>料名</th><th>類別</th><th>每盒數量</th><th></th></tr></thead><tbody>`
+      + e.items.map((it, i) => `<tr data-i="${i}"><td><input type="text" list="${q('dl-mat').id}" data-f="code" value="${esc(it.code)}" style="width:130px;"></td><td><input type="text" data-f="name" value="${esc(it.name)}" style="width:100%;min-width:200px;"></td><td><input type="text" data-f="cat" value="${esc(it.cat)}" style="width:70px;"></td><td><input type="number" min="0" data-f="qty" value="${esc(it.qty)}" style="width:80px;"></td><td><button class="btn-ghost" data-rm="${i}">移除</button></td></tr>`).join('')
+      + '</tbody></table>';
+  }
+  const dlId = 'st-dl-' + Math.random().toString(36).slice(2, 8);
+  q('dl-mat').id = dlId;
+  const blank = () => ({sku: '', name: '', items: [{code: '', name: '', cat: '', qty: ''}]});
+  S.edit = blank(); renderForm(); renderBom();
+  function syncEdit(){
+    S.edit.sku = q('e-sku').value; S.edit.name = q('e-name').value;
+    q('e-items').querySelectorAll('tr[data-i]').forEach(tr => {
+      const it = S.edit.items[Number(tr.dataset.i)];
+      tr.querySelectorAll('input').forEach(inp => { it[inp.dataset.f] = inp.value; });
+    });
+  }
+  q('e-items').addEventListener('change', e => {
+    if (e.target.dataset.f !== 'code') return;
+    syncEdit();
+    const tr = e.target.closest('tr'), it = S.edit.items[Number(tr.dataset.i)], m = bom().materials[it.code.trim()];
+    if (m){ if (!it.name) it.name = m.name; if (!it.cat) it.cat = m.cat || ''; renderForm(); }
+  });
+  q('e-add').addEventListener('click', () => { syncEdit(); S.edit.items.push({code: '', name: '', cat: '', qty: ''}); renderForm(); });
+  q('e-clear').addEventListener('click', () => { S.edit = blank(); renderForm(); });
+  q('e-items').addEventListener('click', e => {
+    const i = e.target.dataset && e.target.dataset.rm; if (i === undefined) return;
+    syncEdit(); S.edit.items.splice(Number(i), 1); if (!S.edit.items.length) S.edit.items.push({code: '', name: '', cat: '', qty: ''}); renderForm();
+  });
+  q('e-save').addEventListener('click', async () => {
+    syncEdit();
+    const sku = S.edit.sku.trim().toUpperCase();
+    if (!sku){ say('請輸入禮盒料號。', 'err'); return; }
+    const items = {}, newMats = {};
+    for (const it of S.edit.items){
+      const code = it.code.trim(), n = Number(it.qty);
+      if (!code && !it.qty) continue;
+      if (!code || !(n > 0)){ say('每一列都要有料號，且每盒數量要大於 0（不用的列請按「移除」）。', 'err'); return; }
+      items[code] = (items[code] || 0) + n;
+      newMats[code] = {name: it.name.trim() || (bom().materials[code] || {}).name || code, cat: it.cat.trim() || (bom().materials[code] || {}).cat || ''};
+    }
+    if (!Object.keys(items).length){ say('至少要有一種用料。', 'err'); return; }
+    const B = bom(), exists = !!B.boms[sku];
+    if (exists && !(await opts.confirm(`${sku} 已經有 BOM，要用這份取代嗎？`))) return;
+    const nb = {v: 1, date: opts.today(), materials: Object.assign({}, B.materials, newMats), boms: Object.assign({}, B.boms, {[sku]: {name: S.edit.name.trim(), src: '手動', items}})};
+    if (await opts.setBom(nb)){ say(`已儲存 ${sku}。`, 'ok'); S.edit = blank(); renderForm(); renderBom(); render(); }
+  });
+  q('bom-list').addEventListener('click', async e => {
+    const ed = e.target.dataset && e.target.dataset.edit, dl = e.target.dataset && e.target.dataset.del;
+    const B = bom();
+    if (ed){
+      const b = B.boms[ed];
+      S.edit = {sku: ed, name: b.name || '', items: Object.entries(b.items).map(([c, n]) => ({code: c, name: (B.materials[c] || {}).name || '', cat: (B.materials[c] || {}).cat || '', qty: n}))};
+      renderForm(); q('e-sku').scrollIntoView({block: 'center'});
+    } else if (dl){
+      if (!(await opts.confirm(`確定刪除 ${dl} 的 BOM 嗎？`))) return;
+      const boms = Object.assign({}, B.boms); delete boms[dl];
+      if (await opts.setBom({v: 1, date: opts.today(), materials: B.materials, boms})){ say(`已刪除 ${dl}。`, 'ok'); renderBom(); render(); }
+    }
+  });
+  q('bom-dl').addEventListener('click', async () => {
+    const B = bom(), aoa = [['禮盒料號','禮盒品名(簡化)','來源','料號','料名','類別','每盒數量']];
+    Object.entries(B.boms).sort().forEach(([sku, b]) => Object.entries(b.items).forEach(([c, n]) => { const m = B.materials[c] || {}; aoa.push([sku, b.name, b.src || '', c, m.name || '', m.cat || '', n]); }));
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'BOM');
+    await opts.saveXlsx(wb, `${opts.today()}心茶禮盒用料BOM.xlsx`);
+  });
+  q('bom-file').addEventListener('change', async e => {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    try {
+      const aoa = await opts.readRows(f);
+      const h = aoa[0].map(x => String(x || '').trim());
+      const iS = h.indexOf('禮盒料號'), iN = h.findIndex(x => x.startsWith('禮盒品名')), iSrc = h.indexOf('來源'), iC = h.indexOf('料號'), iMN = h.indexOf('料名'), iCat = h.indexOf('類別'), iQ = h.findIndex(x => x.startsWith('每盒數量'));
+      if ([iS, iC, iMN, iQ].some(i => i === -1)) throw new Error('欄位要有：禮盒料號、料號、料名、每盒數量（可選：禮盒品名、來源、類別）。建議先按「下載目前 BOM」當範本。');
+      const materials = {}, boms = {};
+      for (let i = 1; i < aoa.length; i++){
+        const r = aoa[i], sku = r[iS] ? String(r[iS]).trim().toUpperCase() : '', code = r[iC] ? String(r[iC]).trim() : '', n = Number(r[iQ]);
+        if (!sku || !code || isNaN(n) || n <= 0) continue;
+        materials[code] = {name: r[iMN] ? String(r[iMN]).trim() : code, cat: iCat !== -1 && r[iCat] ? String(r[iCat]).trim() : ''};
+        const b = boms[sku] || (boms[sku] = {name: iN !== -1 && r[iN] ? String(r[iN]).trim() : '', src: iSrc !== -1 && r[iSrc] ? String(r[iSrc]).trim() : '', items: {}});
+        b.items[code] = (b.items[code] || 0) + n;
+      }
+      if (!Object.keys(boms).length) throw new Error('沒有讀到任何有效的用料列');
+      const merge = q('bom-mode').value === 'merge', B = bom();
+      if (!(await opts.confirm(`讀到 ${Object.keys(boms).length} 個禮盒、${Object.keys(materials).length} 種料。\n${merge ? '會合併進目前的 BOM（同禮盒料號以檔案為準）。' : '會取代目前全部的 BOM。'}確定嗎？`))) return;
+      const nb = merge ? {v: 1, date: opts.today(), materials: Object.assign({}, B.materials, materials), boms: Object.assign({}, B.boms, boms)} : {v: 1, date: opts.today(), materials, boms};
+      if (await opts.setBom(nb)){ say(`已上傳 BOM：${Object.keys(boms).length} 個禮盒。`, 'ok'); renderBom(); render(); }
+    } catch(err){ say('BOM 上傳失敗：' + err.message, 'err'); }
+  });
+  q('bom-reset').addEventListener('click', async () => {
+    if (!(await opts.confirm('確定還原成內建 BOM 嗎？你手動新增或修改的會被取代。'))) return;
+    if (await opts.setBom(JSON.parse(JSON.stringify(opts.defaultBom)))){ say('已還原內建 BOM。', 'ok'); renderBom(); render(); }
+  });
+  return {render, renderBom};
+}
+
+
+const MAT_BOM_KEY = 'xincha-stat-bom';
+const MAT_STOCK_KEY = 'xincha-mat-stock';      // {code: qty}
+const MAT_STOCK_LOG_KEY = 'xincha-mat-stock-log';
+let matBom = null, matStock = {}, matStockLog = [], matUi = null;
+
+async function loadMat(){
+  const b = await storageGet(MAT_BOM_KEY);
+  matBom = null;
+  if (b && b.value){ try { const o = JSON.parse(b.value); if (o && o.boms && Object.keys(o.boms).length) matBom = o; } catch(e){} }
+  if (!matBom) matBom = JSON.parse(JSON.stringify(DEFAULT_BOM));
+  const st = await storageGet(MAT_STOCK_KEY); matStock = st && st.value ? JSON.parse(st.value) : {};
+  const lg = await storageGet(MAT_STOCK_LOG_KEY); matStockLog = lg && lg.value ? JSON.parse(lg.value) : [];
+}
+
+function initMatUi(){
+  if (matUi) return;
+  matUi = createStatsUi({
+    root: document.getElementById('mat-root'),
+    defaultBom: DEFAULT_BOM,
+    getBom: () => matBom,
+    setBom: async nb => { const ok = await storageSet(MAT_BOM_KEY, JSON.stringify(nb)); if (ok) matBom = nb; return !!ok; },
+    parsePoFile: matParsePoFile,
+    readRows: readXlsxRows,
+    saveXlsx: async (wb, name) => { XLSX.writeFile(wb, name); },
+    confirm: async m => confirm(m),
+    today: todayStr
+  });
+  // 每次算完用料，順便更新進階的缺口表
+  const res = document.querySelector('#mat-root [data-r="res"]');
+  new MutationObserver(renderMatStock).observe(res, {childList: true});
+}
+
+function lastMatNeed(){
+  // 取核心最後一次計算結果（畫面上的用料表）
+  const rows = [...document.querySelectorAll('#mat-root [data-r="res"] table tbody tr')];
+  const need = {};
+  rows.forEach(tr => {
+    const td = tr.querySelectorAll('td');
+    if (td.length >= 4 && (matBom.materials[td[0].textContent] !== undefined)){
+      need[td[0].textContent] = Number(td[td.length - 1].textContent.replace(/,/g, '')) || 0;
+    }
+  });
+  return need;
+}
+
+function renderMatStock(){
+  const el = document.getElementById('ms-table');
+  if (!el || !matBom) return;
+  document.getElementById('ms-dl').innerHTML = Object.entries(matBom.materials).map(([c, m]) => `<option value="${escapeHtml(c)}">${escapeHtml(m.name)}</option>`).join('');
+  const need = lastMatNeed();
+  const codes = [...new Set([...Object.keys(matStock), ...Object.keys(need)])]
+    .sort((a, b) => ((matBom.materials[a]||{}).cat||'').localeCompare((matBom.materials[b]||{}).cat||'') || a.localeCompare(b));
+  if (!codes.length){ el.innerHTML = '<div class="hint">還沒有登記任何庫存，也還沒算過用料。</div>'; return; }
+  el.innerHTML = `<div class="st-scroll"><table class="st-t"><thead><tr><th>料號</th><th>料名</th><th>類別</th><th class="n">庫存</th><th class="n">需求（最後一次計算）</th><th class="n">缺口</th></tr></thead><tbody>`
+    + codes.map(c => {
+      const m = matBom.materials[c] || {name: c, cat: ''};
+      const st = matStock[c] || 0, nd = need[c] || 0, gap = st - nd;
+      return `<tr><td>${escapeHtml(c)}</td><td>${escapeHtml(m.name)}</td><td>${escapeHtml(m.cat||'')}</td><td class="n">${st}</td><td class="n">${nd}</td><td class="n delta ${gap < 0 ? 'neg' : 'zero'}">${gap < 0 ? gap : '足夠'}</td></tr>`;
+    }).join('') + '</tbody></table></div>';
+}
+
+async function matStockApply(mode){
+  const msg = document.getElementById('ms-msg');
+  const code = document.getElementById('ms-code').value.trim();
+  const qty = (Number(document.getElementById('ms-box').value) || 0) * (Number(document.getElementById('ms-per').value) || 0) + (Number(document.getElementById('ms-loose').value) || 0);
+  if (!code){ msg.className = 'msg show err'; msg.textContent = '請輸入料號'; return; }
+  if (mode === 'in' && !(qty > 0)){ msg.className = 'msg show err'; msg.textContent = '數量要大於 0（箱數×每箱數量＋散裝）'; return; }
+  const before = matStock[code] || 0;
+  matStock[code] = mode === 'in' ? before + qty : qty;
+  matStockLog.push({ date: todayStr(), code, mode: mode === 'in' ? '入庫' : '盤點', qty, before, after: matStock[code] });
+  const ok = (await storageSet(MAT_STOCK_KEY, JSON.stringify(matStock))) && (await storageSet(MAT_STOCK_LOG_KEY, JSON.stringify(matStockLog)));
+  msg.className = 'msg show ' + (ok ? 'ok' : 'err');
+  msg.textContent = ok ? `${code}：${before} → ${matStock[code]}` : '儲存失敗，請重新整理後再試';
+  ['ms-box','ms-per','ms-loose'].forEach(id => document.getElementById(id).value = '');
+  renderMatStock();
+}
+document.getElementById('ms-in').addEventListener('click', () => matStockApply('in'));
+document.getElementById('ms-set').addEventListener('click', () => matStockApply('set'));
+
+document.getElementById('toggle-mat-btn').addEventListener('click', () => {
+  const wrap = document.getElementById('mat-body-wrap');
+  const btn = document.getElementById('toggle-mat-btn');
+  const showing = wrap.style.display !== 'none';
+  wrap.style.display = showing ? 'none' : '';
+  btn.textContent = showing ? '顯示用料統計' : '隱藏用料統計';
+  if (!showing){ initMatUi(); renderMatStock(); }
+});
+
 // ---------- init ----------
 async function loadAll(){
   sysBar('err-bar', '');
@@ -3826,6 +4261,8 @@ async function loadAll(){
   await loadDismissedOrderChanges();
   await loadWarehouseReceived();
   await loadDismissedVanishedOrders();
+  await loadMat();
+  if (matUi){ matUi.renderBom(); matUi.render(); }
   if (snapshots.length){
     const lastWindowDays = snapshots[snapshots.length - 1].windowDays;
     if (lastWindowDays){
