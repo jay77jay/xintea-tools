@@ -109,7 +109,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-16-4';
+const APP_VERSION = 'v2026-11-16-5';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
@@ -329,8 +329,9 @@ function watchJob(id){
     el.innerHTML = `<div class="card"><div style="display:flex;align-items:center;gap:8px"><b style="flex:1">${JOB_NAMES[j.type]||j.type}：${st}</b><button class="btn gray" id="jbClose" style="padding:4px 10px;font-size:13px">關閉</button></div>
       ${j.status === 'queued' ? '<div class="mut">如果一直停在這裡，表示電腦上的工作程式沒開。</div>' : ''}
       ${j.type === 'scanSG' && j.status === 'done' ? `<div class="msg ok">檢查 ${r.checked} 張採購單。</div>
-        ${list('SG 已接收比回報多（請同仁補回報）', r.sgMore, 'warn')}${list('回報比 SG 已接收多（SG 待按接收）', r.reportMore, 'warn')}
-        ${list('已全部寄出、可以鎖單', r.canLock, 'ok')}${list('錯誤', r.errors, 'err')}` : ''}
+        ${list('已在 SG 補接收', r.received, 'ok')}${list('已在 SG 鎖單（標記為已完成）', r.locked, 'ok')}
+        ${list('SG 已接收比回報多（請同仁補回報）', r.sgMore, 'warn')}${list('回報比 SG 已接收多（SG 還沒接收）', r.reportMore, 'warn')}
+        ${list('已全部寄出、待鎖單', r.canLock, 'warn')}${list('錯誤', r.errors, 'err')}` : ''}
       ${j.error ? `<div class="msg err">${esc(j.error)}</div>` : ''}
       <details ${j.status === 'done' ? '' : 'open'}><summary class="mut">執行紀錄</summary><pre style="white-space:pre-wrap;font-size:12px;margin:6px 0 0">${esc((j.log||[]).join('\n'))}</pre></details></div>`;
     $('jbClose').onclick = () => { if (JOB_UNSUB) JOB_UNSUB(); JOB_ID = null; el.innerHTML = ''; };
