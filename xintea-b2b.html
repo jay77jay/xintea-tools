@@ -109,7 +109,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-16-6';
+const APP_VERSION = 'v2026-11-16-7';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
@@ -336,7 +336,7 @@ function watchJob(id){
       ${j.type === 'scanNew' && j.status === 'done' ? `<div class="msg ok">預覽完成（還沒有建單、列印或回填）。</div>
         ${list('預計建立的 SG 採購單', r.planned, 'ok')}${list('EIP 還查不到的生產單', r.eipMissing, 'warn')}
         ${list('已列印但系統沒有（可能是同仁手動建的）', r.printedNotIn, 'warn')}${list('系統內生產單有異動', r.changed, 'warn')}
-        ${list('其他', r.skipped, 'warn')}${list('錯誤', r.errors, 'err')}` : ''}
+        ${list('還沒到開單時間（最早到貨日超過 10 天）', r.later, 'warn')}${list('其他', r.skipped, 'warn')}${list('錯誤', r.errors, 'err')}` : ''}
       ${j.error ? `<div class="msg err">${esc(j.error)}</div>` : ''}
       <details ${j.status === 'done' ? '' : 'open'}><summary class="mut">執行紀錄</summary><pre style="white-space:pre-wrap;font-size:12px;margin:6px 0 0">${esc((j.log||[]).join('\n'))}</pre></details></div>`;
     $('jbClose').onclick = () => { if (JOB_UNSUB) JOB_UNSUB(); JOB_ID = null; el.innerHTML = ''; };
