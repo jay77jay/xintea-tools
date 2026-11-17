@@ -116,7 +116,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-17-3';
+const APP_VERSION = 'v2026-11-17-4';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
@@ -357,10 +357,10 @@ function watchJob(id){
   JOB_ID = id; if (JOB_UNSUB) JOB_UNSUB();
   JOB_UNSUB = db.collection(COL_JOB).doc(id).onSnapshot(async d => {
     const j = d.data(); const el = $('jobPanel'); if (!j || !el) return;
-    const st = {queued:'等待工作程式接手…', running:'執行中…', done:'完成', error:'失敗'}[j.status] || j.status;
+    const st = {queued:'等待工作程式接手…', running:j.cancelRequested ? '取消中…（等目前這一步做完）' : '執行中…', done:'完成', error:'失敗', cancelled:'已取消'}[j.status] || j.status;
     const r = j.result || {};
     const list = (t, a, cls) => a && a.length ? `<div class="msg ${cls}"><b>${t}（${a.length}）</b>\n${a.map(esc).join('\n')}</div>` : '';
-    el.innerHTML = `<div class="card"><div style="display:flex;align-items:center;gap:8px"><b style="flex:1">${JOB_NAMES[j.type]||j.type}：${st}</b><button class="btn gray" id="jbClose" style="padding:4px 10px;font-size:13px">關閉</button></div>
+    el.innerHTML = `<div class="card"><div style="display:flex;align-items:center;gap:8px"><b style="flex:1">${JOB_NAMES[j.type]||j.type}：${st}</b>${(j.status === 'queued' || j.status === 'running') && !j.cancelRequested ? '<button class="btn red" id="jbCancel" style="padding:4px 10px;font-size:13px">⏹ 取消</button>' : ''}<button class="btn gray" id="jbClose" style="padding:4px 10px;font-size:13px" title="只關掉這個框，工作會繼續在電腦上跑">關閉</button></div>
       ${j.status === 'queued' ? '<div class="mut">如果一直停在這裡，表示電腦上的工作程式沒開。</div>' : ''}
       ${j.type === 'scanSG' && j.status === 'done' ? `<div class="msg ok">檢查 ${r.checked} 張採購單。</div>
         ${list('已在 SG 補接收', r.received, 'ok')}${list('已在 SG 鎖單（標記為已完成）', r.locked, 'ok')}
@@ -383,6 +383,13 @@ function watchJob(id){
     if (ap) ap.onclick = () => {
       if (!ap.dataset.armed){ ap.dataset.armed = 1; ap.textContent = '再按一次確認（會真的在 SG 建單並送印）'; $('jbApplyHint').textContent = '生產單：' + ap.dataset.n.split(',').join('、'); return; }
       ap.disabled = true; startJob('scanNew', {apply:true, approve: ap.dataset.n.split(','), fromJob: id, arriveTo: j.arriveTo || r.arriveTo || null});
+    };
+    const cb = $('jbCancel');
+    if (cb) cb.onclick = async () => {
+      if (!cb.dataset.armed){ cb.dataset.armed = 1; cb.textContent = '再按一次確認取消'; return; }
+      cb.disabled = true;
+      const ref = db.collection(COL_JOB).doc(id);
+      await (j.status === 'queued' ? ref.update({status:'cancelled', cancelRequested:true, finishedAt:new Date().toISOString()}) : ref.update({cancelRequested:true}));
     };
     $('jbClose').onclick = () => { if (JOB_UNSUB) JOB_UNSUB(); JOB_ID = null; el.innerHTML = ''; };
     if (j.status === 'done' && !d.metadata.hasPendingWrites && !watchJob.reloaded?.[id]){
