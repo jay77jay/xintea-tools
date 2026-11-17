@@ -110,7 +110,7 @@ const firebaseConfig = {
   messagingSenderId: "175590672953",
   appId: "1:175590672953:web:6304ddce7b45b191529be8"
 };
-const VERSION = 'xintea-ship-2026-11-17-4';
+const VERSION = 'xintea-ship-2026-11-17-5';
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth(), db = firebase.firestore();
 const COL = 'xintea_b2b_jobs';
@@ -124,6 +124,7 @@ const GATES = [
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const pad = (n) => String(n).padStart(2, '0');
+const tw = (iso) => iso ? new Date(iso).toLocaleString('zh-TW', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
 const d0 = new Date(); $('mmdd').value = pad(d0.getMonth() + 1) + pad(d0.getDate());
 $('ver').textContent = VERSION;
 $('windowDays').oninput = () => { wdEdited = true; };
@@ -223,6 +224,13 @@ $('start2').onclick = async () => {
   if (!confirm(`${dry ? '【試跑】' : ''}開始 心茶${mmdd} 第 2 段？\n\n${dry ? '只檢查，不會入庫、不會上傳。' : '會在 SG 入庫、上傳 SG出，請確認同仁已經接收採購單。'}`)) return;
   try { await addJob({ type: 'b2cShip', mmdd, dryRun: dry }); } catch (e) { alert('送出失敗：' + e.message); }
 };
+window.rerunGiftbox = async (id) => {
+  const j = lastJobs.find((x) => x.id === id) || {};
+  const windowDays = parseInt($('windowDays').value, 10);
+  if (!(windowDays >= 1 && windowDays <= 60)) return alert('抓取天數要是 1～60 的數字');
+  if (!confirm(`重跑 心茶${j.mmdd}${j.label ? '（' + j.label + '）' : ''} 的禮盒增加數和 SG 採購單？\n抓未來 ${windowDays} 天（上方欄位的天數）。\n\n今天的快照如果已經上傳過，會直接用那筆匯出；天數不一樣會停下來提醒你。`)) return;
+  try { await addJob({ type: 'b2cStart', only: 'giftbox', label: j.label || '', windowDays, mmdd: j.mmdd }); } catch (e) { alert('送出失敗：' + e.message); }
+};
 window.doPrint = async (id) => {
   if (!confirm('送印這次的所有列印檔？\n\n有黑貓託運單的話，請先在 MPC5502 手送台放厚紙。')) return;
   try { await addJob({ type: 'b2cPrint', parent: id }); } catch (e) { alert('送出失敗：' + e.message); }
@@ -262,8 +270,8 @@ function renderAsk(j) {
 const stepIcon = (v) => !v ? '' : v.ok ? '✅' : '⚠';
 function renderStart(j) {
   const r = j.result || j.partial || {}; const st = r.steps || {};
-  let h = `<div class="card"><div class="row" style="justify-content:space-between"><b>① 出貨開始 心茶${esc(r.mmdd || j.mmdd || '')}${j.label ? '（' + esc(j.label) + '）' : ''}${j.dryRun ? '（試跑）' : ''}</b>${statusPill(j)}</div>
-    <div class="sub">${esc(String(j.createdAt || '').replace('T', ' ').slice(0, 16))}　${esc(j.by || '')}　${esc(r.step || '')}</div>`;
+  let h = `<div class="card"><div class="row" style="justify-content:space-between"><b>① ${j.only === 'giftbox' ? '重跑禮盒＋採購單' : '出貨開始'} 心茶${esc(r.mmdd || j.mmdd || '')}${j.label ? '（' + esc(j.label) + '）' : ''}${j.dryRun ? '（試跑）' : ''}</b>${statusPill(j)}</div>
+    <div class="sub">${esc(tw(j.createdAt))}　${esc(j.by || '')}　${esc(r.step || '')}</div>`;
   if (j.error) h += `<div class="note bad">❌ ${esc(j.error)}</div>`;
   h += renderAsk(j);
   const rows = [];
@@ -277,6 +285,9 @@ function renderStart(j) {
   add('新竹上傳＋託運單', (v) => v.dryRun ? '試跑（已登入）' : `${v.home} 張 → ${esc(String(v.pdf || '').split('/').pop())}`);
   add('Drive 訂單明細／託運單', (v) => `今天 ${v.found.length} 個，新下載 ${v.downloaded.length}`);
   if (rows.length) h += `<table>${rows.join('')}</table>`;
+  const gbFail = (st['禮盒增加數'] && !st['禮盒增加數'].ok) || (st['SG 採購單'] && !st['SG 採購單'].ok);
+  const newer = lastJobs.some((x) => x.type === 'b2cStart' && x.only === 'giftbox' && x.mmdd === j.mmdd && String(x.createdAt) > String(j.createdAt) && x.status !== 'error');
+  if (j.status === 'done' && gbFail && !j.dryRun && !newer) h += `<div class="row" style="margin-top:10px"><button onclick="rerunGiftbox('${j.id}')" ${can('start1') ? '' : 'disabled'}>🔁 重跑禮盒＋採購單</button><span class="sub">沿用今天已下載的總表；今天的快照已存在就直接匯出</span></div>`;
   if (j.giftboxShot) h += `<h3>禮盒增加數（長按存圖，貼到 DC）</h3><img class="shot" src="${esc(j.giftboxShot)}">`;
   const logs = j.log || [];
   if (logs.length) h += `<details ${j.status === 'running' ? 'open' : ''}><summary class="sub" style="margin-top:8px">執行紀錄</summary><pre class="log">${esc(logs.join('\n'))}</pre></details>`;
@@ -287,7 +298,7 @@ function renderShip(j) {
   const kids = (children[j.id] || []).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
   const printJob = kids.filter((k) => k.type === 'b2cPrint').pop(), confJob = kids.filter((k) => k.type === 'b2cConfirm').pop();
   let h = `<div class="card"><div class="row" style="justify-content:space-between"><b>② 第 2 段 心茶${esc(j.mmdd)}${j.dryRun ? '（試跑）' : ''}</b>${statusPill(j)}</div>
-    <div class="sub">${esc(String(j.createdAt || '').replace('T', ' ').slice(0, 16))}　${esc(j.by || '')}　${esc(r.step || '')}</div>`;
+    <div class="sub">${esc(tw(j.createdAt))}　${esc(j.by || '')}　${esc(r.step || '')}</div>`;
   if (j.error) h += `<div class="note bad">❌ ${esc(j.error)}</div>`;
   if (r.stockIn) {
     h += `<h3>入庫</h3>` + (r.stockIn.done.length ? r.stockIn.done.map((x) => `<div>PO-${esc(x.po)}：${esc(x.items.join('、'))}${x.dryRun ? '（試跑）' : ''}</div>`).join('') : '<div class="sub">沒有要入庫的品項</div>');
