@@ -62,7 +62,7 @@
       <h2>① 收到心茶通知 → 出貨開始</h2>
       <div class="row" style="margin-bottom:10px">
         <label>抓未來幾天的訂單 <input type="text" id="windowDays" inputmode="numeric" style="width:60px"> 天</label>
-        <label>時段 <select id="label"><option value="">（一天一次）</option><option>上午</option><option>下午</option></select></label>
+        <label>時段 <select id="label"><option value="">（一天一次）</option><option>上午</option><option>中午</option><option>下午</option></select></label>
         <label class="sub"><input type="checkbox" id="dry1"> 試跑（只下載、檢查，不動 BPM／SG／新竹／禮盒）</label>
       </div>
       <details class="sub" style="margin-bottom:10px"><summary>進階</summary>
@@ -70,7 +70,7 @@
       </details>
       <button id="start1" class="big" disabled>出貨開始</button>
       <div class="sub" id="wdHint" style="margin-top:6px"></div>
-      <div class="sub" style="margin-top:8px">依序：BPM 總表 → 禮盒增加數 → 建 SG 採購單並列印（同仁可以開始做）→ 物流表 → 批次確認 → 整單 → 新竹上傳與託運單 → Drive 抓今天的 PDF。<br>同一天第二次通知請選「上午／下午」。</div>
+      <div class="sub" style="margin-top:8px">依序：BPM 總表 → 禮盒增加數 → 建 SG 採購單並列印（同仁可以開始做）→ 物流表 → 批次確認 → 整單 → 新竹上傳與託運單 → Drive 抓今天的 PDF。<br>同一天第二次以後的通知請選時段（上午／中午／下午）。</div>
       <div id="lock1" class="lock"></div>
     </div>
 
@@ -110,7 +110,7 @@ const firebaseConfig = {
   messagingSenderId: "175590672953",
   appId: "1:175590672953:web:6304ddce7b45b191529be8"
 };
-const VERSION = 'xintea-ship-2026-11-17-3';
+const VERSION = 'xintea-ship-2026-11-17-4';
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth(), db = firebase.firestore();
 const COL = 'xintea_b2b_jobs';
