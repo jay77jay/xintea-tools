@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>心茶 B2C 出貨控制台</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --line:#e3e6ea; --ink:#1d2329; --sub:#66707a; --ok:#1a7f45; --warn:#b26b00; --bad:#c0392b; --pri:#2b6cb0; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, "Microsoft JhengHei", "Noto Sans TC", sans-serif; background:var(--bg); color:var(--ink); font-size:15px; }
+  header { padding:12px 16px; background:#fff; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:8px; position:sticky; top:0; z-index:2; flex-wrap:wrap; }
+  header h1 { font-size:17px; margin:0; }
+  nav.tabs { display:flex; gap:6px; }
+  nav.tabs button { background:#eef1f4; color:var(--ink); padding:7px 12px; }
+  nav.tabs button.on { background:var(--pri); color:#fff; }
+  main { max-width:760px; margin:0 auto; padding:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:12px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .sub { color:var(--sub); font-size:13px; }
+  button { font:inherit; border:0; border-radius:8px; padding:10px 14px; background:var(--pri); color:#fff; cursor:pointer; }
+  button.sec { background:#eef1f4; color:var(--ink); }
+  button.big { width:100%; padding:14px; font-size:16px; font-weight:600; }
+  button.green { background:var(--ok); }
+  button:disabled { opacity:.45; cursor:default; }
+  input[type=text], select, textarea { font:inherit; padding:8px; border:1px solid var(--line); border-radius:8px; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:99px; font-size:12px; background:#eef1f4; }
+  .pill.ok { background:#e3f4ea; color:var(--ok); } .pill.warn { background:#fdf1dc; color:var(--warn); } .pill.bad { background:#fbe5e2; color:var(--bad); }
+  pre.log { background:#11161b; color:#cfd8e3; padding:10px; border-radius:8px; font-size:12px; max-height:260px; overflow:auto; white-space:pre-wrap; margin:8px 0 0; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  td, th { border-bottom:1px solid var(--line); padding:6px 4px; text-align:left; vertical-align:top; }
+  h2 { font-size:16px; margin:0 0 8px; }
+  h3 { font-size:15px; margin:12px 0 6px; }
+  .note { background:#fdf1dc; border-radius:8px; padding:8px 10px; font-size:13px; margin:8px 0; white-space:pre-wrap; }
+  .note.bad { background:#fbe5e2; }
+  .ask { border:2px solid var(--warn); background:#fffaf0; border-radius:10px; padding:12px; margin:10px 0; }
+  .ask img { display:block; margin:8px 0; border:1px solid var(--line); image-rendering:pixelated; height:60px; }
+  .hide { display:none; }
+  .shot { max-width:100%; border:1px solid var(--line); border-radius:8px; margin-top:6px; }
+  .lock { font-size:12px; color:var(--warn); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🚚 心茶 B2C 出貨</h1>
+  <nav class="tabs"><button data-v="ship" class="on">今日出貨</button><button data-v="settings">設定</button></nav>
+  <div class="row"><span id="who" class="sub"></span><button id="loginBtn" class="sec">Google 登入</button></div>
+</header>
+<main>
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <div>工作程式：<span id="worker" class="pill">讀取中</span></div>
+      <div class="sub" id="ver"></div>
+    </div>
+    <div class="sub" style="margin-top:6px">按鈕只是送出工作；實際由公司電腦上的「B2B 工作程式」執行（那台電腦要開著，B2B 工作程式和本機出貨服務都要開）。</div>
+  </div>
+
+  <section id="v-ship">
+    <div class="card">
+      <h2>① 收到心茶通知 → 出貨開始</h2>
+      <div class="row" style="margin-bottom:10px">
+        <label>時段 <select id="label"><option value="">（一天一次）</option><option>上午</option><option>下午</option></select></label>
+        <label class="sub"><input type="checkbox" id="dry1"> 試跑（只下載、檢查，不動 BPM／SG／新竹／禮盒）</label>
+      </div>
+      <details class="sub" style="margin-bottom:10px"><summary>進階</summary>
+        <div class="row" style="margin-top:6px">新竹出貨日期（測試用，平常留空）<input type="text" id="hctDate" placeholder="2026/11/22" style="width:120px"></div>
+      </details>
+      <button id="start1" class="big" disabled>出貨開始</button>
+      <div class="sub" style="margin-top:8px">依序：BPM 總表 → 禮盒增加數 → 建 SG 採購單並列印（同仁可以開始做）→ 物流表 → 批次確認 → 整單 → 新竹上傳與託運單 → Drive 抓今天的 PDF。<br>同一天第二次通知請選「上午／下午」。</div>
+      <div id="lock1" class="lock"></div>
+    </div>
+
+    <div class="card">
+      <h2>② 同仁做完、SG 已接收 → 第 2 段</h2>
+      <div class="row" style="margin-bottom:10px">
+        <label>出貨日 MMDD <input type="text" id="mmdd" maxlength="4" style="width:80px"></label>
+        <label class="sub"><input type="checkbox" id="dry2"> 試跑（只檢查，不入庫、不上傳）</label>
+      </div>
+      <button id="start2" class="big green" disabled>採購回報完成 → 開始第 2 段</button>
+      <div class="sub" style="margin-top:8px">依序：SG 入庫 → SG出 上傳（含無庫存舊單）→ 拆可出貨／無庫存 → 託運單裁切 → 比對 → 產生列印檔。做完停下來等「送印」、「確認出貨」。</div>
+      <div id="lock2" class="lock"></div>
+    </div>
+
+    <div id="jobs"></div>
+  </section>
+
+  <section id="v-settings" class="hide">
+    <div class="card">
+      <h2>關卡權限</h2>
+      <div class="sub" style="margin-bottom:10px">每個關卡可以設定「同仁都能按」或「只限管理者」。設成只限管理者時，同仁按了工作程式也不會執行。</div>
+      <table id="gateTable"></table>
+      <h3>管理者（Google 帳號 email，一行一個）</h3>
+      <textarea id="admins" rows="3" style="width:100%"></textarea>
+      <div class="row" style="margin-top:10px"><button id="saveSettings">儲存</button><span id="setMsg" class="sub"></span></div>
+      <div id="setLock" class="lock"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBmb_51Pq-QatHwKkcrNlKw0B6e8YmKAsw",
+  authDomain: "ezfun-warehouse-billing.firebaseapp.com",
+  projectId: "ezfun-warehouse-billing",
+  storageBucket: "ezfun-warehouse-billing.firebasestorage.app",
+  messagingSenderId: "175590672953",
+  appId: "1:175590672953:web:6304ddce7b45b191529be8"
+};
+const VERSION = 'xintea-ship-2026-11-17-1';
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth(), db = firebase.firestore();
+const COL = 'xintea_b2b_jobs';
+const GATES = [
+  ['start1', '① 出貨開始'],
+  ['batchOverride', '批次確認條件不符時放行'],
+  ['start2', '② 開始第 2 段'],
+  ['print', '送印'],
+  ['confirmShip', '確認出貨'],
+];
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const pad = (n) => String(n).padStart(2, '0');
+const d0 = new Date(); $('mmdd').value = pad(d0.getMonth() + 1) + pad(d0.getDate());
+$('ver').textContent = VERSION;
+let user = null, unsubs = [], children = {}, S = { gates: {}, admins: [] }, lastJobs = [];
+
+/* ---------- 分頁 ---------- */
+document.querySelectorAll('nav.tabs button').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('nav.tabs button').forEach((x) => x.classList.toggle('on', x === b));
+  $('v-ship').classList.toggle('hide', b.dataset.v !== 'ship');
+  $('v-settings').classList.toggle('hide', b.dataset.v !== 'settings');
+});
+
+/* ---------- 權限 ---------- */
+const isAdmin = () => !!user && (S.admins || []).map((x) => x.toLowerCase()).includes(user.email.toLowerCase());
+const can = (gate) => !!user && ((S.gates || {})[gate] !== 'admin' || isAdmin());
+function applyLocks() {
+  const lock = (gate) => can(gate) ? '' : '🔒 這個按鈕設定成只限管理者';
+  $('start1').disabled = !user || !can('start1'); $('lock1').textContent = user ? lock('start1') : '';
+  $('start2').disabled = !user || !can('start2'); $('lock2').textContent = user ? lock('start2') : '';
+  const editable = !!user && (isAdmin() || !(S.admins || []).length);
+  $('gateTable').innerHTML = GATES.map(([k, n]) => `<tr><td>${esc(n)}</td><td><select data-g="${k}" ${editable ? '' : 'disabled'}>
+    <option value="staff" ${(S.gates || {})[k] !== 'admin' ? 'selected' : ''}>同仁都能按</option>
+    <option value="admin" ${(S.gates || {})[k] === 'admin' ? 'selected' : ''}>只限管理者</option></select></td></tr>`).join('');
+  if (document.activeElement !== $('admins')) $('admins').value = (S.admins || []).join('\n');
+  $('admins').disabled = !editable; $('saveSettings').disabled = !editable;
+  $('setLock').textContent = !user ? '請先登入' : editable ? ((S.admins || []).length ? '' : '目前還沒有管理者：請先把自己的 email 加進去再儲存。') : '🔒 只有管理者可以修改';
+  if (lastJobs.length) renderJobs();
+}
+$('saveSettings').onclick = async () => {
+  const admins = $('admins').value.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
+  if (!admins.length) return alert('至少要有一位管理者');
+  if (!admins.map((x) => x.toLowerCase()).includes(user.email.toLowerCase()) && !confirm('管理者名單裡沒有你自己，儲存後你就不能再改設定。確定？')) return;
+  const gates = {}; document.querySelectorAll('[data-g]').forEach((s) => gates[s.dataset.g] = s.value);
+  try { await db.collection(COL).doc('_settings').set({ admins, gates, updatedAt: new Date().toISOString(), updatedBy: user.email }); $('setMsg').textContent = '已儲存'; }
+  catch (e) { alert('儲存失敗：' + e.message); }
+};
+
+/* ---------- 登入 ---------- */
+$('loginBtn').onclick = () => user ? auth.signOut() : auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch((e) => alert(e.message));
+auth.onAuthStateChanged((u) => {
+  user = u;
+  $('who').textContent = u ? (u.displayName || u.email) : '';
+  $('loginBtn').textContent = u ? '登出' : 'Google 登入';
+  unsubs.forEach((f) => f()); unsubs = [];
+  applyLocks();
+  if (u) watch();
+});
+
+function watch() {
+  unsubs.push(db.collection(COL).doc('_worker').onSnapshot((s) => {
+    const w = s.data(); const el = $('worker');
+    if (!w) { el.textContent = '沒有紀錄'; el.className = 'pill bad'; return; }
+    const age = (Date.now() - new Date(w.at).getTime()) / 60000;
+    el.textContent = age < 3 ? `運作中（${w.version}）` : `${Math.round(age)} 分鐘沒回應`;
+    el.className = 'pill ' + (age < 3 ? 'ok' : 'bad');
+  }));
+  unsubs.push(db.collection(COL).doc('_settings').onSnapshot((s) => { S = Object.assign({ gates: {}, admins: [] }, s.data() || {}); applyLocks(); }, () => {}));
+  unsubs.push(db.collection(COL).where('type', 'in', ['b2cStart', 'b2cShip', 'b2cPrint', 'b2cConfirm']).onSnapshot((s) => {
+    lastJobs = s.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+    renderJobs();
+  }, (e) => { $('jobs').innerHTML = `<div class="card" style="color:var(--bad)">讀取工作失敗：${esc(e.message)}</div>`; }));
+}
+
+async function addJob(data) {
+  return db.collection(COL).add(Object.assign({ status: 'queued', createdAt: new Date().toISOString(), by: user.displayName || user.email, byEmail: user.email }, data));
+}
+$('start1').onclick = async () => {
+  const label = $('label').value, dry = $('dry1').checked, hctDate = $('hctDate').value.trim();
+  if (hctDate && !/^\d{4}\/\d{2}\/\d{2}$/.test(hctDate)) return alert('新竹日期格式：2026/11/22');
+  const today = lastJobs.filter((j) => j.type === 'b2cStart' && !j.dryRun && j.status !== 'error' && j.mmdd === pad(new Date().getMonth() + 1) + pad(new Date().getDate()));
+  if (!label && !dry && today.length && !confirm('今天已經跑過「出貨開始」了。第二次通知請選「上午／下午」時段，不然禮盒工具會擋下來。仍要送出？')) return;
+  if (!confirm(`${dry ? '【試跑】' : ''}開始第 1 段${label ? '（' + label + '）' : ''}？${hctDate ? '\n新竹出貨日期用 ' + hctDate : ''}`)) return;
+  try { await addJob({ type: 'b2cStart', label, dryRun: dry, hctDate: hctDate || null, mmdd: pad(new Date().getMonth() + 1) + pad(new Date().getDate()) }); } catch (e) { alert('送出失敗：' + e.message); }
+};
+$('start2').onclick = async () => {
+  const mmdd = $('mmdd').value.trim(); const dry = $('dry2').checked;
+  if (!/^\d{4}$/.test(mmdd)) return alert('出貨日要是 4 位數字，例如 1117');
+  if (!confirm(`${dry ? '【試跑】' : ''}開始 心茶${mmdd} 第 2 段？\n\n${dry ? '只檢查，不會入庫、不會上傳。' : '會在 SG 入庫、上傳 SG出，請確認同仁已經接收採購單。'}`)) return;
+  try { await addJob({ type: 'b2cShip', mmdd, dryRun: dry }); } catch (e) { alert('送出失敗：' + e.message); }
+};
+window.doPrint = async (id) => {
+  if (!confirm('送印這次的所有列印檔？\n\n有黑貓託運單的話，請先在 MPC5502 手送台放厚紙。')) return;
+  try { await addJob({ type: 'b2cPrint', parent: id }); } catch (e) { alert('送出失敗：' + e.message); }
+};
+window.doConfirm = async (id, n) => {
+  if (!confirm(`確認這 ${n} 單已經出貨？（會在出貨比對系統標記為已出貨）`)) return;
+  try { await addJob({ type: 'b2cConfirm', parent: id }); } catch (e) { alert('送出失敗：' + e.message); }
+};
+window.answer = async (jobId, askId, value) => {
+  if (value === undefined) { value = ($('ans_' + askId) || {}).value; if (!value) return alert('請輸入'); }
+  try {
+    await db.collection(COL).add({ type: 'b2cAnswer', status: 'answer', parent: jobId, askId, value, by: user.displayName || user.email, byEmail: user.email, createdAt: new Date().toISOString() });
+    const b = document.getElementById('askbox_' + askId); if (b) b.innerHTML = '<span class="sub">已送出，等工作程式繼續…</span>';
+  } catch (e) { alert('送出失敗：' + e.message); }
+};
+
+/* ---------- 顯示 ---------- */
+function statusPill(j) {
+  const m = { queued: ['排隊中', ''], running: ['執行中', 'warn'], done: ['完成', 'ok'], error: ['失敗', 'bad'] }[j.status] || [j.status, ''];
+  return `<span class="pill ${m[1]}">${m[0]}</span>`;
+}
+function renderJobs() {
+  children = {};
+  for (const j of lastJobs) if (j.parent) (children[j.parent] = children[j.parent] || []).push(j);
+  const top = lastJobs.filter((j) => j.type === 'b2cStart' || j.type === 'b2cShip').sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 6);
+  $('jobs').innerHTML = top.map((j) => j.type === 'b2cStart' ? renderStart(j) : renderShip(j)).join('') || '<div class="card sub">還沒有紀錄</div>';
+}
+function renderAsk(j) {
+  const a = j.ask; if (!a || j.status !== 'running') return '';
+  const locked = a.gate && !can(a.gate);
+  let h = `<div class="ask"><b>⏸ ${esc(a.msg.split('\n')[0])}</b>${a.msg.includes('\n') ? `<div class="note">${esc(a.msg.split('\n').slice(1).join('\n'))}</div>` : ''}<div id="askbox_${esc(a.id)}">`;
+  if (locked) h += `<div class="lock">🔒 這個決定只限管理者</div>`;
+  else if (a.kind === 'captcha') h += `<img src="${esc(a.img)}" alt="驗證碼"><div class="row"><input type="text" id="ans_${esc(a.id)}" inputmode="numeric" autocomplete="off" style="width:120px" onkeydown="if(event.key==='Enter')answer('${j.id}','${esc(a.id)}')"><button onclick="answer('${j.id}','${esc(a.id)}')">送出驗證碼</button></div>`;
+  else h += `<div class="row">${(a.options || []).map((o) => `<button class="${o === '停止' ? 'sec' : ''}" onclick="answer('${j.id}','${esc(a.id)}',${esc(JSON.stringify(o))})">${esc(o)}</button>`).join('')}</div>`;
+  return h + '</div></div>';
+}
+const stepIcon = (v) => !v ? '' : v.ok ? '✅' : '⚠';
+function renderStart(j) {
+  const r = j.result || j.partial || {}; const st = r.steps || {};
+  let h = `<div class="card"><div class="row" style="justify-content:space-between"><b>① 出貨開始 心茶${esc(r.mmdd || j.mmdd || '')}${j.label ? '（' + esc(j.label) + '）' : ''}${j.dryRun ? '（試跑）' : ''}</b>${statusPill(j)}</div>
+    <div class="sub">${esc(String(j.createdAt || '').replace('T', ' ').slice(0, 16))}　${esc(j.by || '')}　${esc(r.step || '')}</div>`;
+  if (j.error) h += `<div class="note bad">❌ ${esc(j.error)}</div>`;
+  h += renderAsk(j);
+  const rows = [];
+  const add = (k, txt) => { if (st[k]) rows.push(`<tr><td>${stepIcon(st[k])} ${esc(k)}</td><td>${st[k].ok ? txt(st[k]) : '<span style="color:var(--bad)">' + esc(st[k].error) + '</span>'}</td></tr>`); };
+  add('BPM 總表', (v) => `${v.rows} 列`);
+  add('禮盒增加數', (v) => v.dryRun ? '試跑' : (v.items && v.items.length ? `要做 ${v.items.length} 種：${esc(v.items.map((i) => i.sku + '×' + i.qty).join('、'))}` : '沒有要新增製作的禮盒') + (v.notes && v.notes.length ? `<div class="note">${esc(v.notes.join('\n'))}</div>` : ''));
+  add('SG 採購單', (v) => `<b>${esc(v.po)}</b> ${v.existed ? '（沿用已建立的）' : ''}${v.printed ? '　🖨 已送印' : '　送印失敗：' + esc(v.printError)}`);
+  add('BPM 物流表', (v) => v.rows ? `${v.rows} 列、${v.orders} 單` : '今天沒有要出的單');
+  add('批次確認', (v) => v.dryRun ? `試跑${v.problems && v.problems.length ? '（條件不符：' + esc(v.problems.join('；')) + '）' : '（條件符合）'}` : v.skipped ? `沒有確認（${esc(v.by)} 決定）` : `已確認 ${v.confirmed} 列${v.problems && v.problems.length ? '（放行：' + esc(v.problems.join('；')) + '）' : ''}`);
+  add('整單', (v) => v.dryRun ? '試跑' : `${v.orders} 單（單號從 ${v.start} 起）、自建宅配 ${v.home} 單`);
+  add('新竹上傳＋託運單', (v) => v.dryRun ? '試跑（已登入）' : `${v.home} 張 → ${esc(String(v.pdf || '').split('/').pop())}`);
+  add('Drive 訂單明細／託運單', (v) => `今天 ${v.found.length} 個，新下載 ${v.downloaded.length}`);
+  if (rows.length) h += `<table>${rows.join('')}</table>`;
+  if (j.giftboxShot) h += `<h3>禮盒增加數（長按存圖，貼到 DC）</h3><img class="shot" src="${esc(j.giftboxShot)}">`;
+  const logs = j.log || [];
+  if (logs.length) h += `<details ${j.status === 'running' ? 'open' : ''}><summary class="sub" style="margin-top:8px">執行紀錄</summary><pre class="log">${esc(logs.join('\n'))}</pre></details>`;
+  return h + '</div>';
+}
+function renderShip(j) {
+  const r = j.result || j.partial || {};
+  const kids = (children[j.id] || []).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  const printJob = kids.filter((k) => k.type === 'b2cPrint').pop(), confJob = kids.filter((k) => k.type === 'b2cConfirm').pop();
+  let h = `<div class="card"><div class="row" style="justify-content:space-between"><b>② 第 2 段 心茶${esc(j.mmdd)}${j.dryRun ? '（試跑）' : ''}</b>${statusPill(j)}</div>
+    <div class="sub">${esc(String(j.createdAt || '').replace('T', ' ').slice(0, 16))}　${esc(j.by || '')}　${esc(r.step || '')}</div>`;
+  if (j.error) h += `<div class="note bad">❌ ${esc(j.error)}</div>`;
+  if (r.stockIn) {
+    h += `<h3>入庫</h3>` + (r.stockIn.done.length ? r.stockIn.done.map((x) => `<div>PO-${esc(x.po)}：${esc(x.items.join('、'))}${x.dryRun ? '（試跑）' : ''}</div>`).join('') : '<div class="sub">沒有要入庫的品項</div>');
+    if (r.stockIn.partial.length) h += `<div class="sub">還沒全部接收：${esc(r.stockIn.partial.map((x) => `PO-${x.po}（${x.notReceived.join('、')}）`).join('；'))}</div>`;
+  }
+  if (r.uploads) h += `<h3>SG出</h3><table>${r.uploads.map((u) => `<tr><td>${esc(u.kind)}</td><td>${esc(u.name)}</td><td>${u.dryRun ? '試跑' : `成功 ${u.ok}／失敗 ${u.fail}`}</td></tr>`).join('')}</table>`;
+  if (r.split) h += `<h3>拆檔</h3><div>可出貨 <b>${r.split.success_orders}</b> 單、無庫存 <b>${r.split.fail_orders}</b> 單</div>`;
+  if (r.pdfs && r.pdfs.warnings && r.pdfs.warnings.length) h += `<div class="note">⚠ ${esc(r.pdfs.warnings.join('；'))}</div>`;
+  const s = r.shipment;
+  if (s) {
+    h += `<h3>比對</h3>`;
+    if (s.match) {
+      h += `<div>出貨 <b>${s.match.checked}</b> 單：${esc((s.match.checkedOrders || []).join('、'))}</div>`;
+      if (s.autoTicked && s.autoTicked.length) h += `<div class="sub">依規則自動勾選（自建宅配缺明細）：${esc(s.autoTicked.join('、'))}</div>`;
+      if (s.match.unchecked.length) h += `<div class="sub">沒勾選：${esc(s.match.unchecked.join('、'))}</div>`;
+      if (s.unmatched) h += `<div class="sub">待人工比對池還有 ${s.unmatched} 筆</div>`;
+      if (s.match.notes.length) h += s.match.notes.map((n) => `<div class="note">${esc(n)}</div>`).join('');
+    }
+    if (s.stoppedAt) h += `<div class="note bad">停在：${esc(s.stoppedAt)}${s.error ? '　' + esc(s.error) : ''}　→ 請到 shipment.html 處理</div>`;
+    if (s.warn) h += `<div class="note">${esc(s.warn)}</div>`;
+  }
+  if (r.printPlan) {
+    h += `<h3>列印</h3><table>${r.printPlan.map((p) => `<tr><td>${esc(p.name)}</td><td>${esc(p.error || p.printer)}${p.note ? '<br><span class="sub">' + esc(p.note) + '</span>' : ''}</td></tr>`).join('')}</table>`;
+    const printed = printJob && printJob.status === 'done';
+    h += `<div class="row" style="margin-top:10px">
+      <button onclick="doPrint('${j.id}')" ${!can('print') || j.status !== 'done' || (printJob && printJob.status !== 'error') ? 'disabled' : ''}>🖨 送印</button>
+      ${printJob ? statusPill(printJob) : ''}
+      <button class="green" onclick="doConfirm('${j.id}', ${s && s.match ? s.match.checked : 0})" ${!can('confirmShip') || !printed || (confJob && confJob.status !== 'error') ? 'disabled' : ''}>✅ 確認出貨</button>
+      ${confJob ? statusPill(confJob) : ''}</div>`;
+    if (!can('print') || !can('confirmShip')) h += `<div class="lock">🔒 ${!can('print') ? '送印' : ''}${!can('print') && !can('confirmShip') ? '、' : ''}${!can('confirmShip') ? '確認出貨' : ''}只限管理者</div>`;
+    for (const k of [printJob, confJob].filter(Boolean)) if (k.error) h += `<div class="note bad">❌ ${esc(k.error)}</div>`;
+  }
+  const logs = (j.log || []).concat(...kids.map((k) => k.log || []));
+  if (logs.length) h += `<details ${j.status === 'running' ? 'open' : ''}><summary class="sub" style="margin-top:8px">執行紀錄</summary><pre class="log">${esc(logs.join('\n'))}</pre></details>`;
+  return h + '</div>';
+}
+</script>
+</body>
+</html>
