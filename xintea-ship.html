@@ -80,9 +80,10 @@
       <div class="row" style="margin-bottom:10px">
         <label>出貨日 MMDD <input type="text" id="mmdd" maxlength="4" style="width:80px"></label>
         <label class="sub"><input type="checkbox" id="dry2"> 試跑（只檢查，不入庫、不上傳）</label>
+        <label class="sub"><input type="checkbox" id="retry2"> 只重傳無庫存（不傳新的 SG出）</label>
       </div>
       <button id="start2" class="big green" disabled>採購回報完成 → 開始第 2 段</button>
-      <div class="sub" style="margin-top:8px">依序：SG 入庫 → SG出 上傳（含無庫存舊單）→ 拆可出貨／無庫存 → 託運單裁切 → 比對 → 產生列印檔。做完停下來等「送印」、「確認出貨」。</div>
+      <div class="sub" style="margin-top:8px">依序：SG 入庫 → SG出 上傳（含無庫存舊單）→ 拆可出貨／無庫存 → 託運單裁切 → 比對 → 產生列印檔。做完停下來等「送印」、「確認出貨」。<br>「只重傳無庫存」：新接收入庫、要補無庫存單時用，只把無庫存資料夾的單重傳，當成新的一批。</div>
       <div id="lock2" class="lock"></div>
     </div>
 
@@ -111,7 +112,7 @@ const firebaseConfig = {
   messagingSenderId: "175590672953",
   appId: "1:175590672953:web:6304ddce7b45b191529be8"
 };
-const VERSION = 'xintea-ship-2026-11-17-6';
+const VERSION = 'xintea-ship-2026-11-17-7';
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth(), db = firebase.firestore();
 const COL = 'xintea_b2b_jobs';
@@ -220,10 +221,11 @@ $('start1').onclick = async () => {
   try { await addJob({ type: 'b2cStart', label, windowDays, dryRun: dry, hctDate: hctDate || null, mmdd: pad(new Date().getMonth() + 1) + pad(new Date().getDate()) }); } catch (e) { alert('送出失敗：' + e.message); }
 };
 $('start2').onclick = async () => {
-  const mmdd = $('mmdd').value.trim(); const dry = $('dry2').checked;
+  const mmdd = $('mmdd').value.trim(); const dry = $('dry2').checked; const retryOnly = $('retry2').checked;
   if (!/^\d{4}$/.test(mmdd)) return alert('出貨日要是 4 位數字，例如 1117');
-  if (!confirm(`${dry ? '【試跑】' : ''}開始 心茶${mmdd} 第 2 段？\n\n${dry ? '只檢查，不會入庫、不會上傳。' : '會在 SG 入庫、上傳 SG出，請確認同仁已經接收採購單。'}`)) return;
-  try { await addJob({ type: 'b2cShip', mmdd, dryRun: dry }); } catch (e) { alert('送出失敗：' + e.message); }
+  const what = dry ? '只檢查，不會入庫、不會上傳。' : retryOnly ? '會在 SG 入庫，然後只重傳無庫存資料夾裡的單（不傳新的 SG出），當成新的一批。' : '會在 SG 入庫、上傳 SG出，請確認同仁已經接收採購單。';
+  if (!confirm(`${dry ? '【試跑】' : ''}開始 心茶${mmdd} 第 2 段${retryOnly ? '（只重傳無庫存）' : ''}？\n\n${what}`)) return;
+  try { await addJob({ type: 'b2cShip', mmdd, dryRun: dry, retryOnly }); $('retry2').checked = false; } catch (e) { alert('送出失敗：' + e.message); }
 };
 window.rerunGiftbox = async (id) => {
   const j = lastJobs.find((x) => x.id === id) || {};
@@ -299,7 +301,7 @@ function renderShip(j) {
   const r = j.result || j.partial || {};
   const kids = (children[j.id] || []).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
   const printJob = kids.filter((k) => k.type === 'b2cPrint').pop(), confJob = kids.filter((k) => k.type === 'b2cConfirm').pop();
-  let h = `<div class="card"><div class="row" style="justify-content:space-between"><b>② 第 2 段 心茶${esc(j.mmdd)}${j.dryRun ? '（試跑）' : ''}</b>${statusPill(j)}</div>
+  let h = `<div class="card"><div class="row" style="justify-content:space-between"><b>② 第 2 段 心茶${esc(j.mmdd)}${j.retryOnly ? '（只重傳無庫存）' : ''}${j.dryRun ? '（試跑）' : ''}</b>${statusPill(j)}</div>
     <div class="sub">${esc(tw(j.createdAt))}　${esc(j.by || '')}　${esc(r.step || '')}</div>`;
   if (j.error) h += `<div class="note bad">❌ ${esc(j.error)}</div>`;
   if (r.stockIn) {
