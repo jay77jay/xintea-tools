@@ -110,7 +110,7 @@ const firebaseConfig = {
   messagingSenderId: "175590672953",
   appId: "1:175590672953:web:6304ddce7b45b191529be8"
 };
-const VERSION = 'xintea-ship-2026-11-17-2';
+const VERSION = 'xintea-ship-2026-11-17-3';
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth(), db = firebase.firestore();
 const COL = 'xintea_b2b_jobs';
@@ -127,7 +127,13 @@ const pad = (n) => String(n).padStart(2, '0');
 const d0 = new Date(); $('mmdd').value = pad(d0.getMonth() + 1) + pad(d0.getDate());
 $('ver').textContent = VERSION;
 $('windowDays').oninput = () => { wdEdited = true; };
-let lastWD = null, wdEdited = false;
+let lastWD = null, wdEdited = false, lastSnapWD = null, lastJobWD = null;
+function refreshWD() {
+  const c = [lastSnapWD, lastJobWD].filter(Boolean).sort((a, b) => String(b.at).localeCompare(String(a.at)))[0];
+  lastWD = c ? c.n : null;
+  if (!wdEdited) $('windowDays').value = lastWD || 10;
+  $('wdHint').textContent = c ? `上一次用 ${c.n} 天（${c.src}）` : '還沒有紀錄，先用 10 天';
+}
 let user = null, unsubs = [], children = {}, S = { gates: {}, admins: [] }, lastJobs = [];
 
 /* ---------- 分頁 ---------- */
@@ -181,16 +187,19 @@ function watch() {
     el.textContent = age < 3 ? `運作中（${w.version}）` : `${Math.round(age)} 分鐘沒回應`;
     el.className = 'pill ' + (age < 3 ? 'ok' : 'bad');
   }));
-  // 抓取天數：沿用禮盒工具最後一筆快照用的天數（禮盒工具自己也是這樣記的，兩邊同一個來源）
+  // 抓取天數的預設值：「控制台上一次送出的天數」和「禮盒工具最後一筆快照的天數」取比較新的那個。
+  // 控制台送出時就記住（不等禮盒工具上傳成功），在禮盒工具手動上傳改了天數也會跟著變。
   unsubs.push(db.collection('xintea_giftbox_snaps').orderBy('uploadedAt', 'desc').limit(1).onSnapshot((s) => {
     const last = s.docs[0] && s.docs[0].data();
-    lastWD = last && last.windowDays ? Number(last.windowDays) : null;
-    if (!wdEdited) $('windowDays').value = lastWD || 10;
-    $('wdHint').textContent = last ? `禮盒工具上一次（${last.date}${last.label ? '「' + last.label + '」' : ''}）用 ${last.windowDays || '?'} 天` : '';
-  }, () => { if (!wdEdited && !$('windowDays').value) $('windowDays').value = 10; }));
+    lastSnapWD = last && last.windowDays ? { n: Number(last.windowDays), at: last.uploadedAt, src: `禮盒工具 ${last.date}${last.label ? '「' + last.label + '」' : ''} 上傳` } : null;
+    refreshWD();
+  }, () => refreshWD()));
   unsubs.push(db.collection(COL).doc('_settings').onSnapshot((s) => { S = Object.assign({ gates: {}, admins: [] }, s.data() || {}); applyLocks(); }, () => {}));
   unsubs.push(db.collection(COL).where('type', 'in', ['b2cStart', 'b2cShip', 'b2cPrint', 'b2cConfirm']).onSnapshot((s) => {
     lastJobs = s.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+    const wj = lastJobs.filter((j) => j.type === 'b2cStart' && j.windowDays).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0];
+    lastJobWD = wj ? { n: Number(wj.windowDays), at: wj.createdAt, src: `控制台 ${new Date(wj.createdAt).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })} ${wj.by || ''} 送出` } : null;
+    refreshWD();
     renderJobs();
   }, (e) => { $('jobs').innerHTML = `<div class="card" style="color:var(--bad)">讀取工作失敗：${esc(e.message)}</div>`; }));
 }
