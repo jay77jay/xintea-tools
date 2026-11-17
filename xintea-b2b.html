@@ -81,6 +81,13 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
 .scroll{overflow-x:auto}
 .bar{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--bd);padding:10px 12px;margin:0 -14px -14px;display:flex;gap:10px}
 .bar .btn{flex:1;padding:13px}
+.tag.miss{background:#fdecea;color:var(--red);font-weight:700}
+.missbar{background:#fdecea;color:var(--red);font-weight:700;padding:6px 12px;font-size:14px;border-bottom:1px solid #f3c2bd}
+.missbox{border:2px dashed var(--red);background:#fff8f7;border-radius:10px;padding:10px 12px;margin:10px 0}
+.missbox .t{color:var(--red);font-weight:700;font-size:16px;margin-bottom:4px}
+.dates{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.dates .lbl{flex:0 0 100%}
+.dates input{width:auto;flex:1;min-width:0;padding:7px}
 .hidden{display:none!important}
 </style>
 </head>
@@ -109,7 +116,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-17-1';
+const APP_VERSION = 'v2026-11-17-2';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
@@ -145,6 +152,10 @@ const noDate = n => { const m = stripNo(n).match(/^(\d{4})(\d{2})(\d{2})/); retu
 const srcOf = p => p.src || [];
 const alertKey = a => a.at + '|' + a.text;
 /** 已入帳月份標籤：billedManual 可為 true 或 '2026-10' */
+/** 缺少的單據：worker 寫入 p.missing = ['prod','ship']（找到後移除） */
+const DOC_NAMES = {prod:'生產單', ship:'託運單'};
+const missOf = p => (p.missing || []).filter(k => DOC_NAMES[k]);
+const missText = p => missOf(p).map(k => DOC_NAMES[k]).join('、');
 const billedLabel = v => { const m = String(v).match(/^\d{4}-(\d{2})$/); return m ? `已入${+m[1]}月帳` : '已入帳'; };
 
 /** 每張採購單的衍生資訊 */
@@ -213,7 +224,7 @@ let db = null, user = null;
 const Store = {
   cache: {},
   async loadAll(){
-    if (DEMO){ this.cache = JSON.parse(JSON.stringify(DEMO_DATA)); return; }
+    if (DEMO){ this.cache = JSON.parse(JSON.stringify(DEMO_DATA)); this.cache['PO-0743'].missing = ['ship']; this.cache['PO-0718'].missing = ['prod','ship']; return; }
     const snap = await db.collection(COL_PO).get();
     this.cache = {}; snap.forEach(d => this.cache[d.id] = d.data());
   },
@@ -274,10 +285,14 @@ function renderList(){
       <input id="q" placeholder="搜尋：採購單號、客戶、料號、生產單號" autocomplete="off">
       <div class="sortbar"><span class="mut">排序：</span>${Object.entries(SORTS).map(([k,v]) => `<button data-s="${k}" class="${SORT===k?'on':''}">${v.label}</button>`).join('')}</div>
       <p class="mut" style="margin:8px 0 0">掃採購單上的 QR 碼會直接打開該單。紅框＝生產單有異動，橘邊＝客製化。</p>
+      <div class="dates"><span class="mut lbl">搜尋新訂單的訂單日期（預設最近 14 天）</span>
+        <input type="date" id="jbFrom" value="${esc(scanRange().from)}"><span class="mut">～</span><input type="date" id="jbTo" value="${esc(scanRange().to)}">
+      </div>
       <div class="row" style="margin-top:10px">
-        <button class="btn ghost" id="jbNew" title="目前只預覽：列出新生產單和預計建立的 SG 採購單，不會建單或列印">🔍 搜尋新訂單（預覽）</button>
+        <button class="btn ghost" id="jbNew" title="先預覽：列出這段日期的新訂單和預計建立的 SG 採購單，確認後才建單">🔍 搜尋新訂單（預覽）</button>
         <button class="btn ghost" id="jbSG">📦 掃描 SG 接收</button>
       </div>
+      <div id="missAll"></div>
       <div class="mut" id="wkState" style="margin-top:6px"></div>
     </div>
     <div id="jobPanel"></div>
@@ -296,14 +311,31 @@ function renderList(){
   };
   $('q').oninput = draw; draw();
   $('jbSG').onclick = () => startJob('scanSG');
-  $('jbNew').onclick = () => startJob('scanNew');
+  $('jbNew').onclick = () => {
+    const from = $('jbFrom').value, to = $('jbTo').value;
+    if (!from || !to || from > to){ $('jobPanel').innerHTML = '<div class="msg err">請設定正確的日期區間（開始日不能晚於結束日）。</div>'; return; }
+    try { localStorage.setItem('xintea-b2b-scan', JSON.stringify({from, to, at: today()})); } catch(e){}
+    startJob('scanNew', {dateFrom: from, dateTo: to});
+  };
+  const miss = Store.list().filter(p => p.status !== 'done' && missOf(p).length);
+  if (miss.length){
+    $('missAll').innerHTML = `<div class="msg warn" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="flex:1">有 <b>${miss.length}</b> 張採購單缺單據：${miss.map(p => esc(p.po) + '（缺' + esc(missText(p)) + '）').join('、')}</span>
+      <button class="btn" id="jbMissAll" style="padding:6px 12px;font-size:14px">🔍 全部重新搜尋並下載</button></div>`;
+    $('jbMissAll').onclick = () => startJob('fetchDocs', {pos: miss.map(p => p.po)});
+  }
   workerState();
   if (JOB_ID) watchJob(JOB_ID);
 }
 
 /* ---------- 按鈕工作（由電腦上的 B2B 工作程式執行） ---------- */
 const COL_JOB = 'xintea_b2b_jobs';
-const JOB_NAMES = {scanSG:'掃描 SG 接收', scanNew:'搜尋新訂單'};
+const JOB_NAMES = {scanSG:'掃描 SG 接收', scanNew:'搜尋新訂單', fetchDocs:'搜尋並下載缺少的單據'};
+/** 搜尋新訂單的日期區間：預設最近 14 天；手動設定過的區間當天內沿用 */
+function scanRange(){
+  try { const v = JSON.parse(localStorage.getItem('xintea-b2b-scan') || 'null'); if (v && v.at === today() && v.from && v.to) return v; } catch(e){}
+  const d = new Date(Date.now() + 8*3600e3 - 14*864e5).toISOString().slice(0,10);
+  return {from: d, to: today()};
+}
 let JOB_ID = null, JOB_UNSUB = null;
 async function workerState(){
   const el = $('wkState'); if (!el) return;
@@ -333,25 +365,28 @@ function watchJob(id){
         ${list('已在 SG 補接收', r.received, 'ok')}${list('已在 SG 鎖單（標記為已完成）', r.locked, 'ok')}
         ${list('SG 已接收比回報多（請同仁補回報）', r.sgMore, 'warn')}${list('回報比 SG 已接收多（SG 還沒接收）', r.reportMore, 'warn')}
         ${list('已全部寄出、待鎖單', r.canLock, 'warn')}${list('錯誤', r.errors, 'err')}` : ''}
+      ${j.type === 'scanNew' && j.dateFrom ? `<div class="mut">訂單日期 ${esc(j.dateFrom)} ～ ${esc(j.dateTo)}</div>` : ''}
+      ${j.type === 'fetchDocs' && j.status === 'done' ? `<div class="msg ok">搜尋 ${(j.pos||[]).length} 張採購單的單據。</div>
+        ${list('已找到並下載', r.found, 'ok')}${list('還是找不到', r.still, 'warn')}${list('錯誤', r.errors, 'err')}` : ''}
       ${j.type === 'scanNew' && j.status === 'done' && j.apply ? `<div class="msg ok">正式執行完成。</div>
-        ${list('已建立並送印', r.created, 'ok')}${list('已回填生產單大表', r.backfilled, 'ok')}
+        ${list('已建立並送印', r.created, 'ok')}${list('已建立但缺單據（卡片會標示，之後可再搜尋下載）', r.createdMissing, 'warn')}${list('已回填生產單大表', r.backfilled, 'ok')}
         ${list('已不是待開單、跳過', r.gone, 'warn')}${list('EIP 還查不到的生產單', r.eipMissing, 'warn')}${list('錯誤', r.errors, 'err')}` : ''}
       ${j.type === 'scanNew' && j.status === 'done' && !j.apply ? `<div class="msg ok">預覽完成（還沒有建單、列印或回填）。</div>
-        ${list('預計建立的 SG 採購單', r.planned, 'ok')}${list('EIP 還查不到的生產單', r.eipMissing, 'warn')}
+        ${list('預計建立的 SG 採購單', r.planned, 'ok')}${list('缺生產單或託運單（一樣會建立，卡片標示缺什麼）', (r.plannedData||[]).filter(p => (p.missing||[]).length).map(p => p.prodNos.map(stripNo).join('、') + '　缺' + p.missing.map(k => DOC_NAMES[k] || k).join('、')), 'warn')}${list('EIP 還查不到的生產單', r.eipMissing, 'warn')}
         ${list('已列印但系統沒有（可能是同仁手動建的）', r.printedNotIn, 'warn')}${list('系統內生產單有異動', r.changed, 'warn')}
         ${list('還沒到開單時間（最早到貨日超過 10 天）', r.later, 'warn')}${list('其他', r.skipped, 'warn')}${list('錯誤', r.errors, 'err')}
-        ${(() => { const ok = (r.plannedData||[]).filter(p => !p.trial && !(p.noItem||[]).length); return ok.length ? `<button class="btn" id="jbApply" data-n="${ok.flatMap(p => p.prodNos).join(',')}">✅ 確認建立 ${ok.length} 張（建 SG 採購單、列印、回填列印日期）</button><div class="mut" id="jbApplyHint"></div>` : ''; })()}` : ''}
+        ${(() => { const ok = (r.plannedData||[]).filter(p => !p.trial && !(p.noItem||[]).length); const mc = ok.filter(p => (p.missing||[]).length).length; return ok.length ? `<button class="btn" id="jbApply" data-n="${ok.flatMap(p => p.prodNos).join(',')}">✅ 確認建立 ${ok.length} 張（建 SG 採購單、列印、回填列印日期${mc ? `；其中 ${mc} 張缺單據，一樣建立` : ''}）</button><div class="mut" id="jbApplyHint"></div>` : ''; })()}` : ''}
       ${j.error ? `<div class="msg err">${esc(j.error)}</div>` : ''}
       <details ${j.status === 'done' ? '' : 'open'}><summary class="mut">執行紀錄</summary><pre style="white-space:pre-wrap;font-size:12px;margin:6px 0 0">${esc((j.log||[]).join('\n'))}</pre></details></div>`;
     const ap = $('jbApply');
     if (ap) ap.onclick = () => {
       if (!ap.dataset.armed){ ap.dataset.armed = 1; ap.textContent = '再按一次確認（會真的在 SG 建單並送印）'; $('jbApplyHint').textContent = '生產單：' + ap.dataset.n.split(',').join('、'); return; }
-      ap.disabled = true; startJob('scanNew', {apply:true, approve: ap.dataset.n.split(','), fromJob: id});
+      ap.disabled = true; startJob('scanNew', {apply:true, approve: ap.dataset.n.split(','), fromJob: id, dateFrom: j.dateFrom || null, dateTo: j.dateTo || null});
     };
     $('jbClose').onclick = () => { if (JOB_UNSUB) JOB_UNSUB(); JOB_ID = null; el.innerHTML = ''; };
     if (j.status === 'done' && !d.metadata.hasPendingWrites && !watchJob.reloaded?.[id]){
       (watchJob.reloaded = watchJob.reloaded || {})[id] = true;
-      await Store.loadAll(); if (VIEW === 'report' && $('listOpen')) renderList();
+      await Store.loadAll(); if (VIEW === 'report' && $('listOpen')) renderList(); else if (VIEW === 'report' && $('missBox') && j.type === 'fetchDocs') openForm($('missBox').dataset.po);
     }
   });
 }
@@ -363,13 +398,20 @@ function itemHtml({p, m}){
   const sgWarn = p.status !== 'done' && pg.hasSg && pg.tSg > pg.tRep ? `<span class="tag" style="background:#fdecea;color:#c62828">SG 已接收 ${pg.tSg}，待補回報</span>` : '';
   const bar = p.status !== 'done' && pg.tRep > 0 ? `<div style="height:6px;background:#eee;border-radius:3px;margin-top:6px"><div style="height:6px;border-radius:3px;background:var(--g);width:${Math.min(100, pg.tRep/pg.tOrd*100)}%"></div></div>` : '';
   const al = m.alerts.length ? `<div class="alertbar">⚠ 生產單異動 ${m.alerts.length} 項：${esc(m.alerts[0].text.replace(/^生產單 \S+ 列印後有異動：/, ''))}${m.alerts.length > 1 ? '…' : ''}</div>` : '';
-  return `<button class="po-item${m.alerts.length ? ' alert' : ''}${m.custom ? ' cus' : ''}" data-po="${esc(p.po)}">${al}<div class="in">
-    <b>${esc(p.po)}</b>${st}${m.custom ? '<span class="tag cus">客製</span>' : ''}${m.billedAll ? `<span class="tag billed">${m.billedTag}</span>` : m.billedSome ? `<span class="tag billed">部分${m.billedTag}</span>` : ''}${sgWarn}<br>
+  const ms = p.status !== 'done' ? missText(p) : '';
+  const mb = ms ? `<div class="missbar">📄 缺${esc(ms)}　點開可搜尋下載</div>` : '';
+  return `<button class="po-item${m.alerts.length ? ' alert' : ''}${m.custom ? ' cus' : ''}" data-po="${esc(p.po)}">${al}${mb}<div class="in">
+    <b>${esc(p.po)}</b>${st}${ms ? `<span class="tag miss">缺${esc(ms)}</span>` : ''}${m.custom ? '<span class="tag cus">客製</span>' : ''}${m.billedAll ? `<span class="tag billed">${m.billedTag}</span>` : m.billedSome ? `<span class="tag billed">部分${m.billedTag}</span>` : ''}${sgWarn}<br>
     <span>${esc(p.customer||'')}</span> · <span class="mut">${(p.lines||[]).map(l => esc(l.sku) + '×' + l.qty).join('、')}（共 ${qty}）</span>
     <div class="meta"><span>新增 <b>${esc(m.added || '—')}</b></span><span>最早到貨 <b>${esc(md(m.arrive) || '—')}</b></span><span>製作 ${esc(md(p.date))}</span></div>${bar}
   </div></button>`;
 }
 
+/** 已下載的單據連結：worker 寫入 p.docs = {prod:[{no,url}], ship:[{no,url}]} */
+function docLinks(p){
+  const rows = Object.entries(DOC_NAMES).flatMap(([k, n]) => ((p.docs||{})[k] || []).filter(d => d && d.url).map(d => `<a href="${esc(d.url)}" target="_blank" rel="noopener">${n} ${esc(stripNo(d.no) || d.no || '')}</a>`));
+  return rows.length ? `<div class="meta" style="margin-top:8px">📎 ${rows.join('　')}</div>` : '';
+}
 /* ---------- 完成回報：表單（打開的小卡） ---------- */
 async function openForm(poNo){
   VIEW = 'report';
@@ -409,6 +451,10 @@ async function openForm(poNo){
     <div class="meta"><span>新增 <b>${esc(m.added||'—')}</b></span><span>最早到貨 <b>${esc(md(m.arrive)||'—')}</b></span><span>製作 ${esc(md(p.date))}</span></div>
     ${m.alerts.length ? `<div class="redbox"><div class="t">⚠ 生產單有異動，製作前請確認</div>${m.alerts.map(a => `<div>・${esc(a.text)} <span class="mut">${esc(a.at)}</span></div>`).join('')}
       <button class="btn red" id="ack" style="margin-top:8px;padding:7px 14px;font-size:14px">我已確認異動</button></div>` : ''}
+    ${missOf(p).length ? `<div class="missbox" id="missBox" data-po="${esc(p.po)}"><div class="t">📄 缺${esc(missText(p))}</div>
+      <div class="mut">建立時還找不到${esc(missText(p))}，資料先建好了。${p.missingCheckedAt ? '上次搜尋：' + esc(new Date(p.missingCheckedAt).toLocaleString('zh-TW', {hour12:false})) : ''}</div>
+      <button class="btn red" id="fetchDocs" style="margin-top:8px;padding:7px 14px;font-size:14px">🔍 搜尋並下載${esc(missText(p))}</button><div id="jobPanel"></div></div>` : ''}
+    ${docLinks(p)}
     ${cusSrc.length ? `<div class="cusbox"><div class="t">★ 客製化／特殊注意事項</div>${cusSrc.map(srcHtml).join('')}</div>` : ''}
     ${stdSrc.length ? `<div class="card" style="background:#fafafa;margin:10px 0"><div class="mut" style="margin-bottom:4px">標準品</div>${stdSrc.map(srcHtml).join('')}</div>` : ''}
     <h3>製作進度</h3>
@@ -436,6 +482,7 @@ async function openForm(poNo){
     <div class="bar"><button class="btn" id="fSubmit">送出這批回報</button></div>`}
   </div>`;
   $('back').onclick = renderList;
+  if ($('fetchDocs')) $('fetchDocs').onclick = () => { $('fetchDocs').disabled = true; startJob('fetchDocs', {pos:[p.po], need: missOf(p)}); };
   if ($('ack')) $('ack').onclick = async () => {
     const keys = [...new Set([...(p.ack||[]), ...m.alerts.map(alertKey)])];
     await Store.save(p.po, {ack: keys}); openForm(p.po);
@@ -648,6 +695,8 @@ window.b2bUpsertPOs = async function(list){
     const base = {po, sgId:x.sgId||null, ref:x.ref||'', customer:x.customer||'', date:x.date||'', prodNos:x.prodNos||[], shipNos:x.shipNos||[],
       src:x.src||[], lines:(x.lines||[]).map(l => ({sku:l.sku, name:l.name||'', qty:num(l.qty)}))};
     if (x.addedAt) base.addedAt = x.addedAt;
+    if (x.missing) base.missing = x.missing;
+    if (x.docs) base.docs = x.docs;
     if (!exist) base.status = 'open';
     await Store.save(po, base); exist ? out.updated++ : out.added++;
   }
