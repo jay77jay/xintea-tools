@@ -8,4 +8,6 @@
 | 📦 B2B 生產回報 | xintea-b2b.html | 同仁回報、用料、月底清單、搜尋新訂單、掃描 SG 接收 |
 | 🎁 禮盒・用料 | xintea-giftbox.html | 每日禮盒增加數、SG 採購單匯出、用料統計 |
 
+搜尋新訂單可設定日期區間；缺生產單或託運單的採購單一樣建立，卡片會標示缺什麼，可再按鈕搜尋下載。工作程式要配合的欄位見 [b2b-worker-jobs.md](b2b-worker-jobs.md)。
+
 `index.html` 只是外框（分頁＋iframe），三個頁面各自獨立，原本的網址與 QR 碼照常可用。按鈕送出的工作由公司電腦上的 B2B 工作程式（b2b-worker.js）執行。
