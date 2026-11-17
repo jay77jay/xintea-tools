@@ -109,7 +109,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-16-7';
+const APP_VERSION = 'v2026-11-17-1';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
@@ -315,9 +315,9 @@ async function workerState(){
     el.innerHTML = on ? `工作程式：<b style="color:var(--g)">在線</b>（${esc(d.data().version)}）` : `工作程式：<b style="color:var(--red)">離線</b>　請在電腦上執行 start-b2b-worker.bat${at ? '（最後在線 ' + at.toLocaleString('zh-TW', {hour12:false}) + '）' : ''}`;
   } catch(e){ el.textContent = '讀不到工作程式狀態：' + e.message; }
 }
-async function startJob(type){
+async function startJob(type, extra){
   if (DEMO){ $('jobPanel').innerHTML = '<div class="msg warn">試用模式不能執行，請用正式網址。</div>'; return; }
-  const ref = await db.collection(COL_JOB).add({type, status:'queued', createdAt: new Date().toISOString(), by: user ? (user.displayName || user.email) : ''});
+  const ref = await db.collection(COL_JOB).add({...(extra||{}), type, status:'queued', createdAt: new Date().toISOString(), by: user ? (user.displayName || user.email) : ''});
   watchJob(ref.id);
 }
 function watchJob(id){
@@ -333,12 +333,21 @@ function watchJob(id){
         ${list('已在 SG 補接收', r.received, 'ok')}${list('已在 SG 鎖單（標記為已完成）', r.locked, 'ok')}
         ${list('SG 已接收比回報多（請同仁補回報）', r.sgMore, 'warn')}${list('回報比 SG 已接收多（SG 還沒接收）', r.reportMore, 'warn')}
         ${list('已全部寄出、待鎖單', r.canLock, 'warn')}${list('錯誤', r.errors, 'err')}` : ''}
-      ${j.type === 'scanNew' && j.status === 'done' ? `<div class="msg ok">預覽完成（還沒有建單、列印或回填）。</div>
+      ${j.type === 'scanNew' && j.status === 'done' && j.apply ? `<div class="msg ok">正式執行完成。</div>
+        ${list('已建立並送印', r.created, 'ok')}${list('已回填生產單大表', r.backfilled, 'ok')}
+        ${list('已不是待開單、跳過', r.gone, 'warn')}${list('EIP 還查不到的生產單', r.eipMissing, 'warn')}${list('錯誤', r.errors, 'err')}` : ''}
+      ${j.type === 'scanNew' && j.status === 'done' && !j.apply ? `<div class="msg ok">預覽完成（還沒有建單、列印或回填）。</div>
         ${list('預計建立的 SG 採購單', r.planned, 'ok')}${list('EIP 還查不到的生產單', r.eipMissing, 'warn')}
         ${list('已列印但系統沒有（可能是同仁手動建的）', r.printedNotIn, 'warn')}${list('系統內生產單有異動', r.changed, 'warn')}
-        ${list('還沒到開單時間（最早到貨日超過 10 天）', r.later, 'warn')}${list('其他', r.skipped, 'warn')}${list('錯誤', r.errors, 'err')}` : ''}
+        ${list('還沒到開單時間（最早到貨日超過 10 天）', r.later, 'warn')}${list('其他', r.skipped, 'warn')}${list('錯誤', r.errors, 'err')}
+        ${(() => { const ok = (r.plannedData||[]).filter(p => !p.trial && !(p.noItem||[]).length); return ok.length ? `<button class="btn" id="jbApply" data-n="${ok.flatMap(p => p.prodNos).join(',')}">✅ 確認建立 ${ok.length} 張（建 SG 採購單、列印、回填列印日期）</button><div class="mut" id="jbApplyHint"></div>` : ''; })()}` : ''}
       ${j.error ? `<div class="msg err">${esc(j.error)}</div>` : ''}
       <details ${j.status === 'done' ? '' : 'open'}><summary class="mut">執行紀錄</summary><pre style="white-space:pre-wrap;font-size:12px;margin:6px 0 0">${esc((j.log||[]).join('\n'))}</pre></details></div>`;
+    const ap = $('jbApply');
+    if (ap) ap.onclick = () => {
+      if (!ap.dataset.armed){ ap.dataset.armed = 1; ap.textContent = '再按一次確認（會真的在 SG 建單並送印）'; $('jbApplyHint').textContent = '生產單：' + ap.dataset.n.split(',').join('、'); return; }
+      ap.disabled = true; startJob('scanNew', {apply:true, approve: ap.dataset.n.split(','), fromJob: id});
+    };
     $('jbClose').onclick = () => { if (JOB_UNSUB) JOB_UNSUB(); JOB_ID = null; el.innerHTML = ''; };
     if (j.status === 'done' && !d.metadata.hasPendingWrites && !watchJob.reloaded?.[id]){
       (watchJob.reloaded = watchJob.reloaded || {})[id] = true;
