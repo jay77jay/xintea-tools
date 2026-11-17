@@ -7,6 +7,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="screen-relay.js"></script>
 <style>
   :root { --bg:#f6f7f9; --card:#fff; --line:#e3e6ea; --ink:#1d2329; --sub:#66707a; --ok:#1a7f45; --warn:#b26b00; --bad:#c0392b; --pri:#2b6cb0; }
   * { box-sizing: border-box; }
@@ -110,7 +111,7 @@ const firebaseConfig = {
   messagingSenderId: "175590672953",
   appId: "1:175590672953:web:6304ddce7b45b191529be8"
 };
-const VERSION = 'xintea-ship-2026-11-17-5';
+const VERSION = 'xintea-ship-2026-11-17-6';
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth(), db = firebase.firestore();
 const COL = 'xintea_b2b_jobs';
@@ -263,6 +264,7 @@ function renderAsk(j) {
   const locked = a.gate && !can(a.gate);
   let h = `<div class="ask"><b>⏸ ${esc(a.msg.split('\n')[0])}</b>${a.msg.includes('\n') ? `<div class="note">${esc(a.msg.split('\n').slice(1).join('\n'))}</div>` : ''}<div id="askbox_${esc(a.id)}">`;
   if (locked) h += `<div class="lock">🔒 這個決定只限管理者</div>`;
+  else if (a.kind === 'screen') h += `<div class="sub">📱 已跳出畫面視窗；縮小了的話按右下角「工作程式需要操作」。</div>`;
   else if (a.kind === 'captcha') h += `<img src="${esc(a.img)}" alt="驗證碼"><div class="row"><input type="text" id="ans_${esc(a.id)}" inputmode="numeric" autocomplete="off" style="width:120px" onkeydown="if(event.key==='Enter')answer('${j.id}','${esc(a.id)}')"><button onclick="answer('${j.id}','${esc(a.id)}')">送出驗證碼</button></div>`;
   else h += `<div class="row">${(a.options || []).map((o) => `<button class="${o === '停止' ? 'sec' : ''}" onclick="answer('${j.id}','${esc(a.id)}',${esc(JSON.stringify(o))})">${esc(o)}</button>`).join('')}</div>`;
   return h + '</div></div>';

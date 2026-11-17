@@ -7,6 +7,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="screen-relay.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{--g:#1f7a4d;--g2:#e8f4ee;--bd:#dcdfe3;--mut:#6b7280;--warn:#fff4e0;--err:#fdecea;--red:#c62828;--org:#e67e22;--org2:#fff3e6}
@@ -116,7 +117,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-17-6';
+const APP_VERSION = 'v2026-11-17-7';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
