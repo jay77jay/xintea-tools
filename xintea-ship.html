@@ -61,6 +61,7 @@
     <div class="card">
       <h2>① 收到心茶通知 → 出貨開始</h2>
       <div class="row" style="margin-bottom:10px">
+        <label>抓未來幾天的訂單 <input type="text" id="windowDays" inputmode="numeric" style="width:60px"> 天</label>
         <label>時段 <select id="label"><option value="">（一天一次）</option><option>上午</option><option>下午</option></select></label>
         <label class="sub"><input type="checkbox" id="dry1"> 試跑（只下載、檢查，不動 BPM／SG／新竹／禮盒）</label>
       </div>
@@ -68,6 +69,7 @@
         <div class="row" style="margin-top:6px">新竹出貨日期（測試用，平常留空）<input type="text" id="hctDate" placeholder="2026/11/22" style="width:120px"></div>
       </details>
       <button id="start1" class="big" disabled>出貨開始</button>
+      <div class="sub" id="wdHint" style="margin-top:6px"></div>
       <div class="sub" style="margin-top:8px">依序：BPM 總表 → 禮盒增加數 → 建 SG 採購單並列印（同仁可以開始做）→ 物流表 → 批次確認 → 整單 → 新竹上傳與託運單 → Drive 抓今天的 PDF。<br>同一天第二次通知請選「上午／下午」。</div>
       <div id="lock1" class="lock"></div>
     </div>
@@ -108,7 +110,7 @@ const firebaseConfig = {
   messagingSenderId: "175590672953",
   appId: "1:175590672953:web:6304ddce7b45b191529be8"
 };
-const VERSION = 'xintea-ship-2026-11-17-1';
+const VERSION = 'xintea-ship-2026-11-17-2';
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth(), db = firebase.firestore();
 const COL = 'xintea_b2b_jobs';
@@ -124,6 +126,8 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<
 const pad = (n) => String(n).padStart(2, '0');
 const d0 = new Date(); $('mmdd').value = pad(d0.getMonth() + 1) + pad(d0.getDate());
 $('ver').textContent = VERSION;
+$('windowDays').oninput = () => { wdEdited = true; };
+let lastWD = null, wdEdited = false;
 let user = null, unsubs = [], children = {}, S = { gates: {}, admins: [] }, lastJobs = [];
 
 /* ---------- 分頁 ---------- */
@@ -177,6 +181,13 @@ function watch() {
     el.textContent = age < 3 ? `運作中（${w.version}）` : `${Math.round(age)} 分鐘沒回應`;
     el.className = 'pill ' + (age < 3 ? 'ok' : 'bad');
   }));
+  // 抓取天數：沿用禮盒工具最後一筆快照用的天數（禮盒工具自己也是這樣記的，兩邊同一個來源）
+  unsubs.push(db.collection('xintea_giftbox_snaps').orderBy('uploadedAt', 'desc').limit(1).onSnapshot((s) => {
+    const last = s.docs[0] && s.docs[0].data();
+    lastWD = last && last.windowDays ? Number(last.windowDays) : null;
+    if (!wdEdited) $('windowDays').value = lastWD || 10;
+    $('wdHint').textContent = last ? `禮盒工具上一次（${last.date}${last.label ? '「' + last.label + '」' : ''}）用 ${last.windowDays || '?'} 天` : '';
+  }, () => { if (!wdEdited && !$('windowDays').value) $('windowDays').value = 10; }));
   unsubs.push(db.collection(COL).doc('_settings').onSnapshot((s) => { S = Object.assign({ gates: {}, admins: [] }, s.data() || {}); applyLocks(); }, () => {}));
   unsubs.push(db.collection(COL).where('type', 'in', ['b2cStart', 'b2cShip', 'b2cPrint', 'b2cConfirm']).onSnapshot((s) => {
     lastJobs = s.docs.map((d) => Object.assign({ id: d.id }, d.data()));
@@ -189,11 +200,13 @@ async function addJob(data) {
 }
 $('start1').onclick = async () => {
   const label = $('label').value, dry = $('dry1').checked, hctDate = $('hctDate').value.trim();
+  const windowDays = parseInt($('windowDays').value, 10);
+  if (!(windowDays >= 1 && windowDays <= 60)) return alert('抓取天數要是 1～60 的數字');
   if (hctDate && !/^\d{4}\/\d{2}\/\d{2}$/.test(hctDate)) return alert('新竹日期格式：2026/11/22');
   const today = lastJobs.filter((j) => j.type === 'b2cStart' && !j.dryRun && j.status !== 'error' && j.mmdd === pad(new Date().getMonth() + 1) + pad(new Date().getDate()));
   if (!label && !dry && today.length && !confirm('今天已經跑過「出貨開始」了。第二次通知請選「上午／下午」時段，不然禮盒工具會擋下來。仍要送出？')) return;
-  if (!confirm(`${dry ? '【試跑】' : ''}開始第 1 段${label ? '（' + label + '）' : ''}？${hctDate ? '\n新竹出貨日期用 ' + hctDate : ''}`)) return;
-  try { await addJob({ type: 'b2cStart', label, dryRun: dry, hctDate: hctDate || null, mmdd: pad(new Date().getMonth() + 1) + pad(new Date().getDate()) }); } catch (e) { alert('送出失敗：' + e.message); }
+  if (!confirm(`${dry ? '【試跑】' : ''}開始第 1 段${label ? '（' + label + '）' : ''}？\n禮盒工具抓未來 ${windowDays} 天${lastWD && lastWD !== windowDays ? '（上一次是 ' + lastWD + ' 天，這次改了）' : ''}${hctDate ? '\n新竹出貨日期用 ' + hctDate : ''}`)) return;
+  try { await addJob({ type: 'b2cStart', label, windowDays, dryRun: dry, hctDate: hctDate || null, mmdd: pad(new Date().getMonth() + 1) + pad(new Date().getDate()) }); } catch (e) { alert('送出失敗：' + e.message); }
 };
 $('start2').onclick = async () => {
   const mmdd = $('mmdd').value.trim(); const dry = $('dry2').checked;
@@ -247,7 +260,7 @@ function renderStart(j) {
   const rows = [];
   const add = (k, txt) => { if (st[k]) rows.push(`<tr><td>${stepIcon(st[k])} ${esc(k)}</td><td>${st[k].ok ? txt(st[k]) : '<span style="color:var(--bad)">' + esc(st[k].error) + '</span>'}</td></tr>`); };
   add('BPM 總表', (v) => `${v.rows} 列`);
-  add('禮盒增加數', (v) => v.dryRun ? '試跑' : (v.items && v.items.length ? `要做 ${v.items.length} 種：${esc(v.items.map((i) => i.sku + '×' + i.qty).join('、'))}` : '沒有要新增製作的禮盒') + (v.notes && v.notes.length ? `<div class="note">${esc(v.notes.join('\n'))}</div>` : ''));
+  add('禮盒增加數', (v) => (v.windowDays ? `（未來 ${v.windowDays} 天）` : '') + (v.dryRun ? '試跑' : (v.items && v.items.length ? `要做 ${v.items.length} 種：${esc(v.items.map((i) => i.sku + '×' + i.qty).join('、'))}` : '沒有要新增製作的禮盒')) + (v.notes && v.notes.length ? `<div class="note">${esc(v.notes.join('\n'))}</div>` : ''));
   add('SG 採購單', (v) => `<b>${esc(v.po)}</b> ${v.existed ? '（沿用已建立的）' : ''}${v.printed ? '　🖨 已送印' : '　送印失敗：' + esc(v.printError)}`);
   add('BPM 物流表', (v) => v.rows ? `${v.rows} 列、${v.orders} 單` : '今天沒有要出的單');
   add('批次確認', (v) => v.dryRun ? `試跑${v.problems && v.problems.length ? '（條件不符：' + esc(v.problems.join('；')) + '）' : '（條件符合）'}` : v.skipped ? `沒有確認（${esc(v.by)} 決定）` : `已確認 ${v.confirmed} 列${v.problems && v.problems.length ? '（放行：' + esc(v.problems.join('；')) + '）' : ''}`);
