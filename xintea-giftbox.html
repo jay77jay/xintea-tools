@@ -842,6 +842,14 @@
 <script>
 // ============================================================
 // 版本紀錄（每次有邏輯或功能異動，記得在這裡加一行＋更新 APP_VERSION）
+// v1.20.0（2026-11-17）：★修正增加數比對（11/16 抓 14 天 → 11/17 抓 3 天，增加數變 -137、紅框誤報 A020011/AA00342/AA00344）：
+//                        1. 範圍天數不同時，超出這次範圍（看訂單自己的製作許可日）的訂單不再算成減少、不進紅框；
+//                           減少只剩「算過的訂單數量真的變少（且還在範圍內）」或「算過的訂單被刪除」
+//                        2. 增加、減少一律逐筆（訂單 key）分開算，不再依料號先加總相減；採購單＝所有增加的加總，
+//                           不被同料號的減少扣掉（AA00344 新訂單 +1 不會再被吃掉）
+//                        3. 改用逐筆帳本：只有「曾經在範圍內、已經算成增加」的 key 才算已處理；之前只在範圍外出現過的訂單，
+//                           之後進到範圍內會算成增加（A020011 ×150 等 11/18 起會進採購單）。帳本從 2026-11-16 起算
+//                        表格「較上次／較基準A」改成增加、減少分開顯示；CSV 多一組減少欄位
 // v1.19.0（2026-11-16）：補回「用料統計」（卡片11）：採購單彙出檔依日期區間／B2B、B2C 算茶包茶點用量、手動輸入禮盒盒數、
 //                        BOM 管理（新增/修改/刪除/整批上傳合併或取代/下載/還原內建）。核心程式直接沿用現場版「心茶 用料統計」，
 //                        BOM 存雲端（xintea_giftbox/xincha-stat-bom）。進階：用料庫存（入庫累加／盤點覆蓋）與缺口，收合預備
@@ -985,8 +993,8 @@
 //                        忽略原因下拉選單、紅框警示掃描全部歷史快照
 // v1.0.0：初始版本（新增/異動/刪除/結案判斷、均茂排除、SG採購單匯出、全品項健康檢查）
 // ============================================================
-const APP_VERSION = 'v1.19.0';
-const APP_VERSION_DATE = '2026-11-16';
+const APP_VERSION = 'v1.20.0';
+const APP_VERSION_DATE = '2026-11-17';
 console.log(`心茶 出貨 禮盒製作每日增加數 ${APP_VERSION}（${APP_VERSION_DATE}）`);
 
 const STORAGE_KEY = 'xincha-giftbox-snapshots';
@@ -1203,79 +1211,156 @@ function snapHasKeys(snap){
   return withKey / snap.rawLines.length > 0.5;
 }
 
-// 逐筆用「訂單key值」比對兩筆快照，算出「真正的淨增加」
-// 核心觀念：訂單「出貨完成消失」不代表不用再做，因為做出來的貨已經跟著出掉了；
-// 只有「明確被刪除」才代表真的不需要製作，才會被扣掉。找不到對應舊紀錄、或狀態消失不明的，一律當作新增才安全（寧可多做，不要少做）。
-function reconcileDelta(prevSnap, latestSnap, shipTo){
-  if (!snapHasKeys(prevSnap) || !snapHasKeys(latestSnap)){
-    // 舊資料沒有 key 值可以逐筆比對，退回用 SKU 加總相減（舊版行為，各自用自己當時的天數）
-    const latestAgg = itemsForThreshold(latestSnap, latestSnap.shipTo || shipTo).items;
-    const prevAgg = itemsForThreshold(prevSnap, prevSnap.shipTo || shipTo).items;
-    const delta = {};
-    const names = {};
-    const allSkus = new Set([...Object.keys(latestAgg), ...Object.keys(prevAgg)]);
-    allSkus.forEach(sku => {
-      delta[sku] = (latestAgg[sku]?.qty||0) - (prevAgg[sku]?.qty||0);
-      names[sku] = latestAgg[sku]?.name || prevAgg[sku]?.name || '';
-    });
-    return { delta, names, exact: false };
-  }
+// ---------- 比對核心（v1.20.0 起：逐筆帳本） ----------
+// 舊版（v1.19.0 以前）的兩個根本問題（2026-11-17 實際發生：11/16 抓 14 天 → 11/17 抓 3 天，增加數變成 -137）：
+//   1. 反向檢查時，「上次在範圍內、這次狀態還在但製作許可日超出這次範圍」的訂單被直接扣掉（天數縮小＝先扣掉），
+//      等於拿兩個不同大小的範圍硬比，範圍外的訂單被當成「減少」，還跑進紅框。
+//   2. 增加跟減少先依料號加總再相減，同料號裡「真正的新訂單 +1」被「範圍外的 -2」吃掉，變成 -1，採購單就漏了。
+//   另外，舊版只看「上一份快照當時的範圍」判斷有沒有算過，天數一變大再變小（3→14→3），中間那次已經算進採購單的訂單，
+//   之後回到 3 天範圍時又會被當成新增，重複請購。
+// 新做法：沿著快照時間順序，維護一本「逐筆帳本」（訂單 key → 已經算進增加數的數量）
+//   - 增加：這次範圍內（製作許可日 ≤ 這次上限）、狀態新增/異動的訂單列，帳本裡沒有 → 整筆算增加；數量比帳本多 → 多出來的算增加
+//   - 減少：只有兩種——帳本裡有、這次還在範圍內但數量真的變少；或帳本裡有、這次狀態變成刪除
+//   - 範圍外（製作許可日 > 這次上限）的訂單：不增、不減，帳本不動，等它之後進到範圍內再算
+//   - 增加跟減少逐筆分開記，絕不互相抵銷：採購單只拿「增加」，減少只進紅框，由使用者決定記錄／忽略
+//   - 只有「曾經在範圍內、而且已經被算成增加」的 key 才算已處理（＝在帳本裡）；只是出現在上一份總表、但不在範圍內的不算
+const ACTIVE_STATUS = s => s === '新增' || s === '異動';
+const isDeletedStatus = s => String(s || '').includes('刪除'); // 不限定完全等於「刪除」兩個字
 
-  const prevShipTo = prevSnap.shipTo || shipTo; // 基準日／前一筆「當時自己」的天數範圍
-  const latestShipTo = latestSnap.shipTo || shipTo; // 這一筆「現在」的天數範圍
+// 帳本起點：11/16 以前的快照是從 09/22 本機版接回來的，跟 11/16 之間斷了將近兩個月，
+// 不能拿來當逐筆累計的依據，所以帳本從這一天以後的第一筆有 key 的快照開始算
+const LEDGER_EPOCH = '2026-11-16';
 
-  const prevByKey = new Map();
-  prevSnap.rawLines.forEach(r => { if (r.key) prevByKey.set(r.key, r); });
+function emptyPair(prevSnap, latestSnap, exact){
+  return { prev: prevSnap, latest: latestSnap, inc: {}, dec: {}, names: {}, incLines: [], decLines: [], exact };
+}
+function pairAdd(p, side, sku, name, qty, line){
+  if (!qty) return;
+  p[side][sku] = (p[side][sku] || 0) + qty;
+  if (name && !p.names[sku]) p.names[sku] = name;
+  (side === 'inc' ? p.incLines : p.decLines).push(Object.assign({ sku, name, qty }, line || {}));
+}
+
+// 舊資料（沒有 key、或在帳本起點以前）沒辦法逐筆比對：退回用料號加總、各自用自己當時的天數相減。
+// 就算是退回的算法，增加跟減少也分開記：只有在料號層級才能看到淨值，這是舊資料本身的限制
+function skuAggPair(prevSnap, latestSnap){
+  const latestAgg = itemsForThreshold(latestSnap, latestSnap.shipTo).items;
+  const prevAgg = itemsForThreshold(prevSnap, prevSnap.shipTo).items;
+  const p = emptyPair(prevSnap, latestSnap, false);
+  new Set([...Object.keys(latestAgg), ...Object.keys(prevAgg)]).forEach(sku => {
+    const d = (latestAgg[sku]?.qty || 0) - (prevAgg[sku]?.qty || 0);
+    const name = latestAgg[sku]?.name || prevAgg[sku]?.name || '';
+    if (d > 0) pairAdd(p, 'inc', sku, name, d);
+    else if (d < 0) pairAdd(p, 'dec', sku, name, -d);
+  });
+  return p;
+}
+
+// 帳本的第一筆：只把「這一筆跟下一筆範圍的交集」內的訂單當作已處理。
+// 例如 11/16 抓 14 天、11/17 抓 3 天：11/16 那份 14 天裡、但超出 11/19 的訂單（A020011、AA00342、AA00344），
+// 從來沒有被任何一次比對算成增加、也沒有進過採購單，不能當成已處理，之後進到範圍內要算增加
+function ledgerInit(snap, nextSnap){
+  const horizon = nextSnap && nextSnap.shipTo && nextSnap.shipTo < snap.shipTo ? nextSnap.shipTo : snap.shipTo;
+  const ledger = new Map();
+  snap.rawLines.forEach(r => {
+    if (!r.key || !ACTIVE_STATUS(r.status) || r.permitDate > horizon) return;
+    const c = ledger.get(r.key);
+    if (c) c.qty += r.qty; else ledger.set(r.key, { sku: r.sku, name: r.name, qty: r.qty });
+  });
+  return ledger;
+}
+
+// 用帳本比對一組（上一筆 → 這一筆），會直接更新帳本
+function ledgerStep(ledger, prevSnap, latestSnap){
+  const p = emptyPair(prevSnap, latestSnap, true);
+  const shipTo = latestSnap.shipTo;
+  // 同一份總表裡同一個 key 理論上只有一列；保險起見先合併，避免同 key 多列互相覆蓋
   const latestByKey = new Map();
-  latestSnap.rawLines.forEach(r => { if (r.key) latestByKey.set(r.key, r); });
+  latestSnap.rawLines.forEach(r => {
+    if (!r.key) return;
+    const ex = latestByKey.get(r.key);
+    if (ex && ex.sku === r.sku && ex.status === r.status) ex.qty += r.qty;
+    else latestByKey.set(r.key, Object.assign({}, r));
+  });
+  latestByKey.forEach((r, key) => {
+    const c = ledger.get(key);
+    const line = { key, orderNo: r.orderNo, permitDate: r.permitDate, status: r.status };
+    if (ACTIVE_STATUS(r.status)){
+      if (r.permitDate > shipTo) return; // 範圍外：看的是這筆訂單自己的製作許可日。不增、不減、帳本不動，等進到範圍內再算
+      if (!c){
+        pairAdd(p, 'inc', r.sku, r.name, r.qty, line); // 從來沒算過（全新訂單，或之前一直在範圍外）
+        ledger.set(key, { sku: r.sku, name: r.name, qty: r.qty });
+      } else if (c.sku !== r.sku){
+        pairAdd(p, 'dec', c.sku, c.name, c.qty, line); // 同一個 key 換了料號：舊料號整筆減少、新料號整筆增加，各自分開記
+        pairAdd(p, 'inc', r.sku, r.name, r.qty, line);
+        ledger.set(key, { sku: r.sku, name: r.name, qty: r.qty });
+      } else if (r.qty > c.qty){
+        pairAdd(p, 'inc', r.sku, r.name, r.qty - c.qty, line);
+        c.qty = r.qty;
+      } else if (r.qty < c.qty){
+        pairAdd(p, 'dec', r.sku, r.name, c.qty - r.qty, line); // key 還在、還在範圍內，但數量真的變少
+        c.qty = r.qty;
+      }
+    } else if (isDeletedStatus(r.status)){
+      if (c){
+        pairAdd(p, 'dec', c.sku, c.name, c.qty, line); // 算過的訂單被刪除／取消
+        ledger.delete(key);
+      }
+      // 沒算過的（一直在範圍外就被刪了）：從來沒做、也沒請購，不是減少
+    } else if (r.status === '結案'){
+      if (c) ledger.delete(key); // 已出貨，不扣；之後如果又以新增/異動復活，視同新的一筆要做
+    }
+    // 客戶確認中、或其他未知狀態：帳本不動（不扣、之後恢復也不重複算）
+  });
+  // 這次總表裡完全找不到的 key：無法分辨是出貨完成還是被刪除，安全起見不扣、帳本也不動
+  // （真的憑空消失的訂單由「訂單消失」紅框另外提醒）
+  return p;
+}
 
-  const delta = {};
-  const names = {};
-  function addDelta(sku, name, amt){
-    delta[sku] = (delta[sku]||0) + amt;
-    if (name) names[sku] = name;
+// 沿著所有快照算一次，結果依快照組合快取起來（render 會呼叫很多次）
+let _ledgerCache = { sig: null, pairs: null };
+function ledgerPairs(){
+  const sig = snapshots.map(s => `${s.uploadedAt}@${s.shipTo}#${s.rawLines ? s.rawLines.length : 0}`).join('|');
+  if (_ledgerCache.sig === sig) return _ledgerCache.pairs;
+  const pairs = new Map(); // "prevUploadedAt|latestUploadedAt" -> pair
+  let ledger = null;
+  for (let i = 0; i < snapshots.length; i++){
+    const s = snapshots[i];
+    const prev = i > 0 ? snapshots[i-1] : null;
+    const usable = snapHasKeys(s) && s.date >= LEDGER_EPOCH;
+    if (!usable){
+      ledger = null;
+      if (prev) pairs.set(`${prev.uploadedAt}|${s.uploadedAt}`, skuAggPair(prev, s));
+      continue;
+    }
+    if (!ledger){
+      if (prev) pairs.set(`${prev.uploadedAt}|${s.uploadedAt}`, skuAggPair(prev, s));
+      ledger = ledgerInit(s, snapshots[i+1]);
+      continue;
+    }
+    pairs.set(`${prev.uploadedAt}|${s.uploadedAt}`, ledgerStep(ledger, prev, s));
   }
+  _ledgerCache = { sig, pairs };
+  return pairs;
+}
 
-  // 正向：latest 裡「現在算在視窗內」的新增/異動列
-  latestByKey.forEach((row, key) => {
-    if ((row.status !== '新增' && row.status !== '異動') || row.permitDate > latestShipTo) return;
-    const prevRow = prevByKey.get(key);
-    if (!prevRow){
-      addDelta(row.sku, row.name, row.qty); // 全新的訂單列
-      return;
-    }
-    // 關鍵：用「前一筆自己當時的天數範圍」判斷它當初有沒有被算過，不能用今天的範圍回頭套用
-    // 否則像「訂單很早就存在，但出廠日剛好落在後來才拉寬的範圍內」這種情況，會被誤判成早就算過，永遠不會被觸發
-    const prevWasCounted = (prevRow.status === '新增' || prevRow.status === '異動') && prevRow.permitDate <= prevShipTo;
-    if (prevWasCounted){
-      const diff = row.qty - prevRow.qty;
-      if (diff !== 0) addDelta(row.sku, row.name, diff); // 同一筆訂單數量變動
-    } else {
-      addDelta(row.sku, row.name, row.qty); // 之前沒被算進視窗內（剛進入範圍、或剛從刪除/結案復活），視同新增
-    }
-  });
+// 相鄰兩筆快照的比對結果：{inc:{sku:qty}, dec:{sku:qty}, names, incLines, decLines, exact}
+function pairDelta(prevSnap, latestSnap){
+  return ledgerPairs().get(`${prevSnap.uploadedAt}|${latestSnap.uploadedAt}`) || emptyPair(prevSnap, latestSnap, true);
+}
 
-  // 反向：prev 裡「當初（用它自己的範圍）算在視窗內」的新增/異動列，檢查現在怎麼樣了
-  prevByKey.forEach((row, key) => {
-    if ((row.status !== '新增' && row.status !== '異動') || row.permitDate > prevShipTo) return;
-    const latestRow = latestByKey.get(key);
-    if (!latestRow){
-      // 完全找不到了：無法確認是出貨完成還是被刪除，安全起見「不扣」（假設已出貨，不影響新增數）
-      return;
-    }
-    const stillCountedNow = (latestRow.status === '新增' || latestRow.status === '異動') && latestRow.permitDate <= latestShipTo;
-    if (stillCountedNow){
-      return; // 正向那一輪已經處理過數量變動了，這裡不重複計算
-    }
-    if (latestRow.status && latestRow.status.includes('刪除')){
-      addDelta(row.sku, row.name, -row.qty); // 明確被取消（狀態包含「刪除」，不限定完全等於「刪除」兩個字），真的要扣掉
-    } else if (latestRow.status === '新增' || latestRow.status === '異動'){
-      addDelta(row.sku, row.name, -row.qty); // 狀態還在，但出廠日超出現在的範圍（天數縮小），近期不用做了，先扣掉
-    }
-    // 其他狀態（結案、或任何未知的新狀態）→ 不扣，安全起見當作已出貨/已完成處理，寧可多做不要少做
-  });
-
-  return { delta, names, exact: true };
+// 從某一筆快照（基準日）到最新一筆的累計：把中間每一組的增加、減少分別加總（不互相抵銷）
+function cumulativeDelta(fromSnap){
+  const out = { inc: {}, dec: {}, names: {}, exact: true };
+  const from = snapshots.indexOf(fromSnap);
+  for (let i = Math.max(from, 0) + 1; i < snapshots.length; i++){
+    const p = pairDelta(snapshots[i-1], snapshots[i]);
+    if (!p.exact) out.exact = false;
+    Object.entries(p.inc).forEach(([k,v]) => { out.inc[k] = (out.inc[k] || 0) + v; });
+    Object.entries(p.dec).forEach(([k,v]) => { out.dec[k] = (out.dec[k] || 0) + v; });
+    Object.entries(p.names).forEach(([k,v]) => { if (v && !out.names[k]) out.names[k] = v; });
+  }
+  return out;
 }
 
 // ---------- Parse xlsx ----------
@@ -1790,15 +1875,20 @@ function detectSplitReissueEvidence(prevSnap, latestSnap, sku){
 }
 
 // 掃描所有歷史相鄰快照的比對，找出還沒被記錄/忽略處理的「減少」品項（跟 render() 裡的邏輯共用）
+// v1.20.0 起：減少是逐筆（訂單 key）算出來的，不會被同料號的增加抵銷；範圍外的訂單不會出現在這裡。
+// 只看帳本算得出來的比對（exact）；帳本起點以前的舊比對，舊版上傳前已經強制處理過，不再重新挖出來
 function getUnresolvedNegativeItems(){
   const negativeBySku = {};
   for (let i = 1; i < snapshots.length; i++){
     const pPrev = snapshots[i-1], pLatest = snapshots[i];
-    const recon = reconcileDelta(pPrev, pLatest, pLatest.shipTo);
-    Object.entries(recon.delta).forEach(([sku, d]) => {
+    const recon = pairDelta(pPrev, pLatest);
+    if (!recon.exact) continue;
+    Object.entries(recon.dec).forEach(([sku, q]) => {
+      const d = -q;
       if (d < 0 && isBoxSku(sku) && !dismissedAlerts[alertKey(pPrev, pLatest, sku)]){
-        if (!negativeBySku[sku]) negativeBySku[sku] = { sku, name: recon.names[sku] || '', d: 0, pairs: [], splitReissueEvidence: [] };
+        if (!negativeBySku[sku]) negativeBySku[sku] = { sku, name: recon.names[sku] || '', d: 0, pairs: [], splitReissueEvidence: [], lines: [] };
         negativeBySku[sku].d += d;
+        recon.decLines.filter(l => l.sku === sku).forEach(l => negativeBySku[sku].lines.push(l));
         negativeBySku[sku].pairs.push({ prevUploadedAt: pPrev.uploadedAt, latestUploadedAt: pLatest.uploadedAt });
         const evidence = detectSplitReissueEvidence(pPrev, pLatest, sku);
         if (evidence.length) negativeBySku[sku].splitReissueEvidence.push(...evidence);
@@ -2254,12 +2344,12 @@ document.getElementById('healthcheck-run-btn').addEventListener('click', async (
   // 算出「基準日到現在」累計淨增加
   const baseline = snapshots.find(s => s.isBaseline) || snapshots[0];
   const latest = snapshots[snapshots.length - 1];
-  const baseRecon = reconcileDelta(baseline, latest, latest.shipTo);
+  const baseRecon = cumulativeDelta(baseline);
 
-  const allSkus = new Set([...Object.keys(baseRecon.delta), ...Object.keys(exportedTotals), ...Object.keys(stockUsedLog)]);
+  const allSkus = new Set([...Object.keys(baseRecon.inc), ...Object.keys(exportedTotals), ...Object.keys(stockUsedLog)]);
   const rows = [];
   allSkus.forEach(sku => {
-    const cumulative = Math.max(0, baseRecon.delta[sku] || 0); // 只看累計「增加」的部分
+    const cumulative = baseRecon.inc[sku] || 0; // 只看累計「增加」的部分（逐筆加總，不被減少抵銷，跟採購單的算法一致）
     const exported = exportedTotals[sku] || 0;
     const stockUsed = stockUsedLog[sku] || 0; // 曾經用庫存直接抵掉、沒有另外開單製作的量：這部分不是缺口，是已經被多做的庫存補上了
     if (cumulative === 0 && exported === 0 && stockUsed === 0) return;
@@ -2283,8 +2373,8 @@ document.getElementById('healthcheck-run-btn').addEventListener('click', async (
   html += `
     <div class="summary-grid" style="margin-bottom:14px;">
       <div class="stat">
-        <div class="label">基準日（${escapeHtml(snapDisp(baseline))}）到現在累計淨增加</div>
-        <div class="value">${Object.values(baseRecon.delta).reduce((a,v)=>a+Math.max(0,v),0)}</div>
+        <div class="label">基準日（${escapeHtml(snapDisp(baseline))}）到現在累計增加</div>
+        <div class="value">${Object.values(baseRecon.inc).reduce((a,v)=>a+v,0)}</div>
       </div>
       <div class="stat">
         <div class="label">所有檔案加總的採購量</div>
@@ -2560,12 +2650,12 @@ uploadBtn.addEventListener('click', async () => {
     return;
   }
 
-  // 防呆 1：抓天數跟上一次不一致（僅提醒確認，數字本身已經會自動校正，不會因此算錯）
+  // 防呆 1：抓天數跟上一次不一致（僅提醒確認，逐筆帳本比對本身不會因為天數不同而算錯）
   const lastSnap = snapshots.length ? snapshots[snapshots.length - 1] : null;
   if (lastSnap && lastSnap.windowDays && lastSnap.windowDays !== windowDays){
     const ok = confirm(
       `上一次上傳（${snapDisp(lastSnap)}）用的是「未來 ${lastSnap.windowDays} 天」，這次填的是「未來 ${windowDays} 天」，天數不一樣。\n\n` +
-      `工具會自動用新的天數重新校正比對，增加數仍然會是準確的，這只是想跟您確認「天數改變是您刻意調整的」，而不是打錯數字。\n\n` +
+      `天數不同時，只有這次範圍內、之前沒算過的訂單會算增加；超出這次範圍的訂單不會算成減少，等之後進到範圍內再算增加。這只是想跟您確認「天數改變是您刻意調整的」，而不是打錯數字。\n\n` +
       `確定要繼續用 ${windowDays} 天上傳嗎？`
     );
     if (!ok) return;
@@ -3316,10 +3406,10 @@ function render(){
   const latest = snapshots[snapshots.length - 1];
   const prev = snapshots.length >= 2 ? snapshots[snapshots.length - 2] : null;
 
-  // 用「訂單key值」逐筆跟前一筆／基準日比對，才能正確分辨「出貨完成」（不扣）跟「真的被取消」（要扣）
-  const prevRecon = prev ? reconcileDelta(prev, latest, latest.shipTo) : null;
-  const baseRecon = reconcileDelta(baseline, latest, latest.shipTo);
-  const projectionNote = (prevRecon && !prevRecon.exact) || !baseRecon.exact;
+  // 用「訂單key值」逐筆帳本比對：增加、減少分開算，不互相抵銷；範圍外的訂單不增不減
+  const prevRecon = prev ? pairDelta(prev, latest) : null;
+  const baseRecon = cumulativeDelta(baseline);
+  const projectionNote = !!(prevRecon && !prevRecon.exact); // 基準A累計可能跨過帳本起點以前的舊資料，不影響今天的增加數，所以只看這一組
 
   // union of all SKUs across all snapshots (含比對後才會出現的品項)；只保留 A/B 開頭的禮盒，過濾掉舊資料可能殘留的料件
   const allSkus = new Map(); // sku -> name
@@ -3373,8 +3463,9 @@ function render(){
       ${windowTotalBlock}
     `;
   } else {
-    let totalVsPrev = 0;
-    allSkus.forEach((name, sku) => { totalVsPrev += prevRecon.delta[sku] || 0; });
+    // 增加數＝這一組所有「增加」的加總（逐筆算，不被同料號的減少扣掉）；減少另外進紅框，不在這裡扣
+    let totalVsPrev = 0, totalDecVsPrev = 0;
+    allSkus.forEach((name, sku) => { totalVsPrev += prevRecon.inc[sku] || 0; totalDecVsPrev += prevRecon.dec[sku] || 0; });
 
     // 減少的品項：掃描「所有」歷史相鄰快照的比對（不只是最新一組），
     // 只要還沒被「記錄」或「忽略」處理過，不管是哪一天發生的，都持續列出來，不會因為換了下一組比較就消失
@@ -3384,7 +3475,10 @@ function render(){
     const cls = totalVsPrev < 0 ? 'neg' : '';
     const sign = totalVsPrev > 0 ? '+' : '';
     const windowNote = prev.windowDays !== latest.windowDays
-      ? `<div class="hero-sub">上次抓「未來${prev.windowDays}天」、這次抓「未來${latest.windowDays}天」，天數不同，但這個數字已經自動校正過，仍然是真正的淨增加量</div>`
+      ? `<div class="hero-sub">上次抓「未來${prev.windowDays}天」、這次抓「未來${latest.windowDays}天」，天數不同：只有這次範圍內（製作許可日 ≤ ${latest.shipTo}）、之前沒算過的訂單才算增加；超出範圍的訂單不算減少，等它進到範圍內時才會算成增加</div>`
+      : '';
+    const decNote = totalDecVsPrev > 0
+      ? `<div class="hero-sub">這一組另外有 ${totalDecVsPrev} 個是「減少」（訂單數量變少或被刪除），沒有從上面的增加數扣掉，請看上方紅框決定要記錄還是忽略</div>`
       : '';
 
     const vanishedAlertBlock = vanishedOrders.length ? `
@@ -3422,6 +3516,7 @@ function render(){
     const negAlertBlock = negativeItems.length ? `
       <div class="neg-alert">
         <div class="neg-alert-title">⚠ 以下品項數量減少，請確認是否已經多做，不要重複製作（可能是之前某一天發生的，尚未處理）</div>
+        <div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:8px;">只有兩種情況會列在這裡：① 已經算進增加數（採購單）的訂單，key 還在、也還在這次範圍內，但數量真的變少；② 已經算進增加數的訂單被刪除／取消。訂單只是因為製作許可日超出這次抓的天數而不在範圍內，不會列在這裡（之後進到範圍內會自動算成增加）。減少不會自動從採購單扣掉，也不會抵銷同料號其他訂單的增加。</div>
         ${negativeItems.map(it => {
           const evidenceHtml = (it.splitReissueEvidence && it.splitReissueEvidence.length) ? `
             <div style="margin-top:6px;padding:8px 12px;background:var(--info-bg);border:1px solid var(--info);border-radius:8px;font-size:12px;color:var(--ink);">
@@ -3439,6 +3534,7 @@ function render(){
               <span class="neg-alert-sku">${escapeHtml(it.sku)}</span>
               <span class="neg-alert-name">${escapeHtml(it.name||'')}</span>
               <span class="neg-alert-qty">${it.d}</span>
+              ${(it.lines && it.lines.length) ? `<span style="font-size:11.5px;color:var(--ink-soft);">${it.lines.map(l => `${escapeHtml(l.key||'')}${l.status ? '（'+escapeHtml(l.status)+'）' : ''} -${l.qty}`).join('、')}</span>` : ''}
               <span class="neg-alert-stock-form">
                 留庫存
                 <input type="text" inputmode="numeric" class="excess-input" data-sku="${escapeHtml(it.sku)}" value="${Math.abs(it.d)}">
@@ -3450,7 +3546,7 @@ function render(){
           </div>
         `;
         }).join('')}
-        <div style="font-size:11.5px;color:var(--ink-soft);margin-top:8px;">日常期間如果這批已做好的要留著當庫存，填數量後按「記錄」；如果不用處理（例如純測試資料、或已經確認沒問題），按「忽略」就不會再跳出這筆提示。檔期期間通常不用管，放著即可。</div>
+        <div style="font-size:11.5px;color:var(--ink-soft);margin-top:8px;">如果這批已經做好、要留著當庫存，填數量後按「記錄」（之後同料號有增加時，匯出採購單會先扣這個庫存）；如果不用處理（例如還沒開始做、純測試資料、或已經確認沒問題），按「忽略」就不會再跳出這筆提示。不管選哪個，都不會改變今天的增加數。</div>
       </div>
     ` : '';
 
@@ -3461,8 +3557,9 @@ function render(){
       ${holdAlertBlock}
       <div class="hero-label">${snapDisp(latest)} 比 ${snapDisp(prev)} 增加的禮盒數</div>
       <div class="hero-number ${cls}">${sign}${totalVsPrev}</div>
-      <div class="hero-sub">這個數字是「淨增加」，用來知道今天要多做幾個；不是視窗內的全部數量</div>
+      <div class="hero-sub">這個數字是今天所有「增加」的加總（＝採購單數量，扣剩餘庫存前），用來知道今天要多做幾個；不是視窗內的全部數量</div>
       ${windowNote}
+      ${decNote}
       ${projectionNote ? '<div class="hero-warn">部分比對對象是舊版資料（沒有明細可逐筆比對），此數字可能包含些微誤差</div>' : ''}
       ${excessStockNoteBlock()}
       ${windowTotalBlock}
@@ -3476,12 +3573,14 @@ function render(){
   // ----- summary card (detailed) -----
   if (snapshots.length >= 2){
     summaryCard.style.display = '';
-    let totalVsPrev = 0, totalVsBaseline = 0, increasedSkuCount = 0;
+    let totalVsPrev = 0, totalVsBaseline = 0, increasedSkuCount = 0, decVsPrev = 0, decVsBaseline = 0;
     allSkus.forEach((name, sku) => {
-      const dPrev = prevRecon.delta[sku] || 0;
-      const dBase = baseRecon.delta[sku] || 0;
+      const dPrev = prevRecon.inc[sku] || 0;
+      const dBase = baseRecon.inc[sku] || 0;
       totalVsPrev += dPrev;
       totalVsBaseline += dBase;
+      decVsPrev += prevRecon.dec[sku] || 0;
+      decVsBaseline += baseRecon.dec[sku] || 0;
       if (dPrev > 0) increasedSkuCount++;
     });
     const cls = v => v > 0 ? 'pos' : (v < 0 ? 'neg' : '');
@@ -3490,12 +3589,12 @@ function render(){
       <div class="stat">
         <div class="label">${snapDisp(latest)} 較 ${snapDisp(prev)}（前一次上傳）</div>
         <div class="value ${cls(totalVsPrev)}">${sign(totalVsPrev)}${totalVsPrev}</div>
-        <div class="sub">今日應增加製作的禮盒總數</div>
+        <div class="sub">今日應增加製作的禮盒總數${decVsPrev ? `（另有減少 ${decVsPrev}，未扣）` : ''}</div>
       </div>
       <div class="stat">
         <div class="label">${snapDisp(latest)} 較基準日 ${snapDisp(baseline)}</div>
         <div class="value ${cls(totalVsBaseline)}">${sign(totalVsBaseline)}${totalVsBaseline}</div>
-        <div class="sub">累計淨增加（出貨完成不扣、明確取消才扣）</div>
+        <div class="sub">累計增加${decVsBaseline ? `；同期另有減少 ${decVsBaseline}（未扣）` : ''}</div>
       </div>
       <div class="stat">
         <div class="label">有增加的品項數</div>
@@ -3551,8 +3650,8 @@ function render(){
       const i = parseInt(key.slice(4), 10);
       return snapshots[i].items[sku]?.qty || 0;
     }
-    if (key === 'dPrev') return prev ? (prevRecon.delta[sku] || 0) : 0;
-    if (key === 'dBase') return baseRecon.delta[sku] || 0;
+    if (key === 'dPrev') return prev ? (prevRecon.inc[sku] || 0) : 0; // 依「增加」排序
+    if (key === 'dBase') return baseRecon.inc[sku] || 0;
     return latest.items[sku]?.qty || 0; // fallback: latestQty 預設排序
   }
 
@@ -3567,7 +3666,15 @@ function render(){
 
   let bodyHtml = '<tbody>';
   const colTotals = visibleCols.map(() => 0);
-  let totalVsPrev = 0, totalVsBase = 0;
+  let totalVsPrev = 0, totalVsBase = 0, totalDecPrev = 0, totalDecBase = 0;
+  // 增加、減少分開顯示：「+8」或「+1 / −2」，不合併成一個淨值
+  function incDecCell(inc, dec){
+    if (!inc && !dec) return { cls: 'zero', txt: '0' };
+    const parts = [];
+    if (inc) parts.push('+' + inc);
+    if (dec) parts.push('−' + dec);
+    return { cls: inc ? 'pos' : 'neg', txt: parts.join(' / ') };
+  }
 
   skuList.forEach(sku => {
     const name = allSkus.get(sku) || '';
@@ -3581,14 +3688,13 @@ function render(){
     if (tableCompactMode && hiddenCount > 0){
       rowHtml += `<td class="num" style="color:var(--ink-soft);">…</td>`;
     }
-    const dPrev = prev ? (prevRecon.delta[sku] || 0) : 0;
-    const dBase = baseRecon.delta[sku] || 0;
-    totalVsPrev += dPrev;
-    totalVsBase += dBase;
-    const dClass = v => v>0?'pos':(v<0?'neg':'zero');
-    const sign = v => v>0?'+':'';
-    rowHtml += `<td class="num delta ${dClass(dPrev)}">${prev? sign(dPrev)+dPrev : '—'}</td>`;
-    rowHtml += `<td class="num delta ${dClass(dBase)}">${sign(dBase)}${dBase}</td>`;
+    const iPrev = prev ? (prevRecon.inc[sku] || 0) : 0, xPrev = prev ? (prevRecon.dec[sku] || 0) : 0;
+    const iBase = baseRecon.inc[sku] || 0, xBase = baseRecon.dec[sku] || 0;
+    totalVsPrev += iPrev; totalDecPrev += xPrev;
+    totalVsBase += iBase; totalDecBase += xBase;
+    const cPrev = incDecCell(iPrev, xPrev), cBase = incDecCell(iBase, xBase);
+    rowHtml += `<td class="num delta ${cPrev.cls}">${prev ? cPrev.txt : '—'}</td>`;
+    rowHtml += `<td class="num delta ${cBase.cls}">${cBase.txt}</td>`;
     rowHtml += `</tr>`;
     bodyHtml += rowHtml;
   });
@@ -3602,10 +3708,9 @@ function render(){
   if (tableCompactMode && hiddenCount > 0){
     totalRow += `<td class="num"></td>`;
   }
-  const dClass = v => v>0?'pos':(v<0?'neg':'zero');
-  const sign = v => v>0?'+':'';
-  totalRow += `<td class="num delta ${dClass(totalVsPrev)}">${prev? sign(totalVsPrev)+totalVsPrev : '—'}</td>`;
-  totalRow += `<td class="num delta ${dClass(totalVsBase)}">${sign(totalVsBase)}${totalVsBase}</td>`;
+  const tPrev = incDecCell(totalVsPrev, totalDecPrev), tBase = incDecCell(totalVsBase, totalDecBase);
+  totalRow += `<td class="num delta ${tPrev.cls}">${prev ? tPrev.txt : '—'}</td>`;
+  totalRow += `<td class="num delta ${tBase.cls}">${tBase.txt}</td>`;
   totalRow += `</tr>`;
   bodyHtml += totalRow + '</tbody>';
 
@@ -3618,20 +3723,22 @@ document.getElementById('export-btn').addEventListener('click', () => {
   const baseline = snapshots.find(s => s.isBaseline) || snapshots[0];
   const latest = snapshots[snapshots.length-1];
   const prev = snapshots.length >= 2 ? snapshots[snapshots.length-2] : null;
-  const prevRecon = prev ? reconcileDelta(prev, latest, latest.shipTo) : null;
-  const baseRecon = reconcileDelta(baseline, latest, latest.shipTo);
+  const prevRecon = prev ? pairDelta(prev, latest) : null;
+  const baseRecon = cumulativeDelta(baseline);
   const allSkus = new Map();
   snapshots.forEach(s => Object.entries(s.items).forEach(([sku,info]) => {
     if (!isBoxSku(sku)) return;
     if (!allSkus.has(sku) || !allSkus.get(sku)) allSkus.set(sku, info.name);
   }));
 
-  let rows = [['商品編號','商品名稱', ...snapshots.map(s=>snapDisp(s)+(s.isBaseline?'(A)':'')), '較上次','較基準A']];
+  let rows = [['商品編號','商品名稱', ...snapshots.map(s=>snapDisp(s)+(s.isBaseline?'(A)':'')), '較上次增加','較上次減少','較基準A增加','較基準A減少']];
   Array.from(allSkus.keys()).forEach(sku => {
     const name = allSkus.get(sku)||'';
     const row = [sku, name, ...snapshots.map(s => s.items[sku]?.qty || 0)];
-    row.push(prev ? (prevRecon.delta[sku] || 0) : '');
-    row.push(baseRecon.delta[sku] || 0);
+    row.push(prev ? (prevRecon.inc[sku] || 0) : '');
+    row.push(prev ? (prevRecon.dec[sku] || 0) : '');
+    row.push(baseRecon.inc[sku] || 0);
+    row.push(baseRecon.dec[sku] || 0);
     rows.push(row);
   });
 
@@ -3674,7 +3781,7 @@ document.getElementById('export-sg-btn').addEventListener('click', async () => {
     if (!ok) return;
   }
 
-  const prevRecon = reconcileDelta(prev, latest, latest.shipTo);
+  const prevRecon = pairDelta(prev, latest);
 
   const allSkus = new Map();
   snapshots.forEach(s => Object.entries(s.items).forEach(([sku,info]) => {
@@ -3687,8 +3794,9 @@ document.getElementById('export-sg-btn').addEventListener('click', async () => {
   const stockUsedNote = []; // 這次用掉了哪些庫存，供訊息顯示
   const stockUsedList = []; // 同樣的資訊，但是結構化資料，供匯出紀錄用
   allSkus.forEach((name, sku) => {
-    let delta = prevRecon.delta[sku] || 0;
-    if (delta < 0) hasNegative = true;
+    // 採購單＝這個料號所有「增加」的加總；同料號的「減少」不扣（減少只進紅框，由使用者決定記錄／忽略）
+    let delta = prevRecon.inc[sku] || 0;
+    if (prevRecon.dec[sku]) hasNegative = true;
     if (delta > 0){
       const stock = excessStock[sku] || 0;
       if (stock > 0){
@@ -3736,7 +3844,7 @@ document.getElementById('export-sg-btn').addEventListener('click', async () => {
 
   if (hasNegative){
     setTimeout(() => {
-      alert('提醒：有部分品項較上次「減少」（可能訂單被改單/取消），這些品項沒有放進採購單裡，但代表目前庫存可能已經多做了，建議另外留意，不要重複製作。');
+      alert('提醒：有部分訂單較上次「減少」（數量變少或被刪除/取消）。減少的部分沒有從採購單扣掉（同料號的增加照樣請購），請到紅框決定要「記錄」為剩餘庫存還是「忽略」。');
     }, 300);
   }
   if (stockUsedNote.length){
