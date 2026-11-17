@@ -116,7 +116,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-17-2';
+const APP_VERSION = 'v2026-11-17-3';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
@@ -285,8 +285,8 @@ function renderList(){
       <input id="q" placeholder="搜尋：採購單號、客戶、料號、生產單號" autocomplete="off">
       <div class="sortbar"><span class="mut">排序：</span>${Object.entries(SORTS).map(([k,v]) => `<button data-s="${k}" class="${SORT===k?'on':''}">${v.label}</button>`).join('')}</div>
       <p class="mut" style="margin:8px 0 0">掃採購單上的 QR 碼會直接打開該單。紅框＝生產單有異動，橘邊＝客製化。</p>
-      <div class="dates"><span class="mut lbl">搜尋新訂單的訂單日期（預設最近 14 天）</span>
-        <input type="date" id="jbFrom" value="${esc(scanRange().from)}"><span class="mut">～</span><input type="date" id="jbTo" value="${esc(scanRange().to)}">
+      <div class="dates"><span class="mut lbl">開單範圍：最早到貨日在這天（含）以前的新訂單（預設今天＋10 天；大單或遇到連假可以往後拉）</span>
+        <input type="date" id="jbTo" value="${esc(scanRange().to)}"><button class="btn gray" id="jbReset" style="padding:6px 10px;font-size:13px">回到 10 天</button>
       </div>
       <div class="row" style="margin-top:10px">
         <button class="btn ghost" id="jbNew" title="先預覽：列出這段日期的新訂單和預計建立的 SG 採購單，確認後才建單">🔍 搜尋新訂單（預覽）</button>
@@ -312,11 +312,12 @@ function renderList(){
   $('q').oninput = draw; draw();
   $('jbSG').onclick = () => startJob('scanSG');
   $('jbNew').onclick = () => {
-    const from = $('jbFrom').value, to = $('jbTo').value;
-    if (!from || !to || from > to){ $('jobPanel').innerHTML = '<div class="msg err">請設定正確的日期區間（開始日不能晚於結束日）。</div>'; return; }
-    try { localStorage.setItem('xintea-b2b-scan', JSON.stringify({from, to, at: today()})); } catch(e){}
-    startJob('scanNew', {dateFrom: from, dateTo: to});
+    const to = $('jbTo').value;
+    if (!to || to < today()){ $('jobPanel').innerHTML = '<div class="msg err">請設定截止日（不能早於今天）。</div>'; return; }
+    try { localStorage.setItem('xintea-b2b-scan', JSON.stringify({to, at: today()})); } catch(e){}
+    startJob('scanNew', {arriveTo: to});
   };
+  $('jbReset').onclick = () => { try { localStorage.removeItem('xintea-b2b-scan'); } catch(e){} $('jbTo').value = scanRange().to; };
   const miss = Store.list().filter(p => p.status !== 'done' && missOf(p).length);
   if (miss.length){
     $('missAll').innerHTML = `<div class="msg warn" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="flex:1">有 <b>${miss.length}</b> 張採購單缺單據：${miss.map(p => esc(p.po) + '（缺' + esc(missText(p)) + '）').join('、')}</span>
@@ -330,11 +331,11 @@ function renderList(){
 /* ---------- 按鈕工作（由電腦上的 B2B 工作程式執行） ---------- */
 const COL_JOB = 'xintea_b2b_jobs';
 const JOB_NAMES = {scanSG:'掃描 SG 接收', scanNew:'搜尋新訂單', fetchDocs:'搜尋並下載缺少的單據'};
-/** 搜尋新訂單的日期區間：預設最近 14 天；手動設定過的區間當天內沿用 */
+/** 開單範圍（最早到貨日截止日）：預設今天＋10 天；手動改過的當天內沿用 */
+const LEAD_DAYS = 10;
 function scanRange(){
-  try { const v = JSON.parse(localStorage.getItem('xintea-b2b-scan') || 'null'); if (v && v.at === today() && v.from && v.to) return v; } catch(e){}
-  const d = new Date(Date.now() + 8*3600e3 - 14*864e5).toISOString().slice(0,10);
-  return {from: d, to: today()};
+  try { const v = JSON.parse(localStorage.getItem('xintea-b2b-scan') || 'null'); if (v && v.at === today() && v.to) return v; } catch(e){}
+  return {to: new Date(Date.now() + 8*3600e3 + LEAD_DAYS*864e5).toISOString().slice(0,10)};
 }
 let JOB_ID = null, JOB_UNSUB = null;
 async function workerState(){
@@ -365,7 +366,7 @@ function watchJob(id){
         ${list('已在 SG 補接收', r.received, 'ok')}${list('已在 SG 鎖單（標記為已完成）', r.locked, 'ok')}
         ${list('SG 已接收比回報多（請同仁補回報）', r.sgMore, 'warn')}${list('回報比 SG 已接收多（SG 還沒接收）', r.reportMore, 'warn')}
         ${list('已全部寄出、待鎖單', r.canLock, 'warn')}${list('錯誤', r.errors, 'err')}` : ''}
-      ${j.type === 'scanNew' && j.dateFrom ? `<div class="mut">訂單日期 ${esc(j.dateFrom)} ～ ${esc(j.dateTo)}</div>` : ''}
+      ${j.type === 'scanNew' && (j.arriveTo || r.arriveTo) ? `<div class="mut">開單範圍：最早到貨日 ${esc(j.arriveTo || r.arriveTo)}（含）以前</div>` : ''}
       ${j.type === 'fetchDocs' && j.status === 'done' ? `<div class="msg ok">搜尋 ${(j.pos||[]).length} 張採購單的單據。</div>
         ${list('已找到並下載', r.found, 'ok')}${list('還是找不到', r.still, 'warn')}${list('錯誤', r.errors, 'err')}` : ''}
       ${j.type === 'scanNew' && j.status === 'done' && j.apply ? `<div class="msg ok">正式執行完成。</div>
@@ -374,14 +375,14 @@ function watchJob(id){
       ${j.type === 'scanNew' && j.status === 'done' && !j.apply ? `<div class="msg ok">預覽完成（還沒有建單、列印或回填）。</div>
         ${list('預計建立的 SG 採購單', r.planned, 'ok')}${list('缺生產單或託運單（一樣會建立，卡片標示缺什麼）', (r.plannedData||[]).filter(p => (p.missing||[]).length).map(p => p.prodNos.map(stripNo).join('、') + '　缺' + p.missing.map(k => DOC_NAMES[k] || k).join('、')), 'warn')}${list('EIP 還查不到的生產單', r.eipMissing, 'warn')}
         ${list('已列印但系統沒有（可能是同仁手動建的）', r.printedNotIn, 'warn')}${list('系統內生產單有異動', r.changed, 'warn')}
-        ${list('還沒到開單時間（最早到貨日超過 10 天）', r.later, 'warn')}${list('其他', r.skipped, 'warn')}${list('錯誤', r.errors, 'err')}
+        ${list('還沒到開單時間（最早到貨日在截止日之後）', r.later, 'warn')}${list('其他', r.skipped, 'warn')}${list('錯誤', r.errors, 'err')}
         ${(() => { const ok = (r.plannedData||[]).filter(p => !p.trial && !(p.noItem||[]).length); const mc = ok.filter(p => (p.missing||[]).length).length; return ok.length ? `<button class="btn" id="jbApply" data-n="${ok.flatMap(p => p.prodNos).join(',')}">✅ 確認建立 ${ok.length} 張（建 SG 採購單、列印、回填列印日期${mc ? `；其中 ${mc} 張缺單據，一樣建立` : ''}）</button><div class="mut" id="jbApplyHint"></div>` : ''; })()}` : ''}
       ${j.error ? `<div class="msg err">${esc(j.error)}</div>` : ''}
       <details ${j.status === 'done' ? '' : 'open'}><summary class="mut">執行紀錄</summary><pre style="white-space:pre-wrap;font-size:12px;margin:6px 0 0">${esc((j.log||[]).join('\n'))}</pre></details></div>`;
     const ap = $('jbApply');
     if (ap) ap.onclick = () => {
       if (!ap.dataset.armed){ ap.dataset.armed = 1; ap.textContent = '再按一次確認（會真的在 SG 建單並送印）'; $('jbApplyHint').textContent = '生產單：' + ap.dataset.n.split(',').join('、'); return; }
-      ap.disabled = true; startJob('scanNew', {apply:true, approve: ap.dataset.n.split(','), fromJob: id, dateFrom: j.dateFrom || null, dateTo: j.dateTo || null});
+      ap.disabled = true; startJob('scanNew', {apply:true, approve: ap.dataset.n.split(','), fromJob: id, arriveTo: j.arriveTo || r.arriveTo || null});
     };
     $('jbClose').onclick = () => { if (JOB_UNSUB) JOB_UNSUB(); JOB_ID = null; el.innerHTML = ''; };
     if (j.status === 'done' && !d.metadata.hasPendingWrites && !watchJob.reloaded?.[id]){
