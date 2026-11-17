@@ -848,7 +848,8 @@
 //                        2. 增加、減少一律逐筆（訂單 key）分開算，不再依料號先加總相減；採購單＝所有增加的加總，
 //                           不被同料號的減少扣掉（AA00344 新訂單 +1 不會再被吃掉）
 //                        3. 改用逐筆帳本：只有「曾經在範圍內、已經算成增加」的 key 才算已處理；之前只在範圍外出現過的訂單，
-//                           之後進到範圍內會算成增加（A020011 ×150 等 11/18 起會進採購單）。帳本從 2026-11-16 起算
+//                           之後進到範圍內會算成增加（A020011 ×150 等 11/18 起會進採購單）。帳本從「基準 A」起算
+//                           （要在 2026-11-16 以後；起點只把跟下一筆範圍的交集當作已處理）
 //                        表格「較上次／較基準A」改成增加、減少分開顯示；CSV 多一組減少欄位
 // v1.19.0（2026-11-16）：補回「用料統計」（卡片11）：採購單彙出檔依日期區間／B2B、B2C 算茶包茶點用量、手動輸入禮盒盒數、
 //                        BOM 管理（新增/修改/刪除/整批上傳合併或取代/下載/還原內建）。核心程式直接沿用現場版「心茶 用料統計」，
@@ -1227,9 +1228,17 @@ function snapHasKeys(snap){
 const ACTIVE_STATUS = s => s === '新增' || s === '異動';
 const isDeletedStatus = s => String(s || '').includes('刪除'); // 不限定完全等於「刪除」兩個字
 
-// 帳本起點：11/16 以前的快照是從 09/22 本機版接回來的，跟 11/16 之間斷了將近兩個月，
-// 不能拿來當逐筆累計的依據，所以帳本從這一天以後的第一筆有 key 的快照開始算
+// 帳本起點：11/16 以前的快照是從 09/22 本機版接回來的，跟 11/16 之間斷了將近兩個月，不能拿來當逐筆累計的依據。
+// 起點＝「基準 A」那一筆（要在 LEDGER_EPOCH 當天或之後、而且有 key）；基準 A 比這天早的話，退回用這天以後第一筆有 key 的快照。
+// 起點那一筆只把「跟下一筆範圍的交集」當作已處理，所以要把基準 A 設在「確定交集內都已經請購過」的那一筆
+// （例如 11/16 中午：交集到 11/19 都已處理，A020011 等 11/20 以後的訂單之後進到範圍內會算成增加）
 const LEDGER_EPOCH = '2026-11-16';
+function ledgerStartIndex(){
+  const ok = s => snapHasKeys(s) && s.date >= LEDGER_EPOCH;
+  const bIdx = snapshots.findIndex(s => s.isBaseline);
+  if (bIdx !== -1 && ok(snapshots[bIdx])) return bIdx;
+  return snapshots.findIndex(ok); // 找不到就是 -1：全部用舊算法
+}
 
 function emptyPair(prevSnap, latestSnap, exact){
   return { prev: prevSnap, latest: latestSnap, inc: {}, dec: {}, names: {}, incLines: [], decLines: [], exact };
@@ -1320,14 +1329,15 @@ function ledgerStep(ledger, prevSnap, latestSnap){
 // 沿著所有快照算一次，結果依快照組合快取起來（render 會呼叫很多次）
 let _ledgerCache = { sig: null, pairs: null };
 function ledgerPairs(){
-  const sig = snapshots.map(s => `${s.uploadedAt}@${s.shipTo}#${s.rawLines ? s.rawLines.length : 0}`).join('|');
+  const sig = snapshots.map(s => `${s.uploadedAt}@${s.shipTo}#${s.rawLines ? s.rawLines.length : 0}${s.isBaseline ? '*' : ''}`).join('|');
   if (_ledgerCache.sig === sig) return _ledgerCache.pairs;
   const pairs = new Map(); // "prevUploadedAt|latestUploadedAt" -> pair
   let ledger = null;
+  const startIdx = ledgerStartIndex();
   for (let i = 0; i < snapshots.length; i++){
     const s = snapshots[i];
     const prev = i > 0 ? snapshots[i-1] : null;
-    const usable = snapHasKeys(s) && s.date >= LEDGER_EPOCH;
+    const usable = startIdx !== -1 && i >= startIdx && snapHasKeys(s) && s.date >= LEDGER_EPOCH;
     if (!usable){
       ledger = null;
       if (prev) pairs.set(`${prev.uploadedAt}|${s.uploadedAt}`, skuAggPair(prev, s));
