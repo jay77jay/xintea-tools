@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>心茶工作台</title>
+<style>
+  :root { --line:#e3e6ea; --ink:#1d2329; --sub:#66707a; --pri:#2b6cb0; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; }
+  body { font-family: -apple-system, "Microsoft JhengHei", "Noto Sans TC", sans-serif; color:var(--ink); background:#f6f7f9; display:flex; flex-direction:column; }
+  header { flex:none; background:#fff; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; padding:8px 12px; flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0 6px 0 0; white-space:nowrap; }
+  nav { display:flex; gap:6px; overflow-x:auto; flex:1; }
+  nav a { flex:none; text-decoration:none; color:var(--ink); background:#eef1f4; padding:8px 14px; border-radius:8px; font-size:14px; white-space:nowrap; }
+  nav a.on { background:var(--pri); color:#fff; }
+  #pop { font-size:12px; color:var(--sub); text-decoration:none; white-space:nowrap; }
+  #frames { flex:1; position:relative; min-height:0; }
+  #frames iframe { position:absolute; inset:0; width:100%; height:100%; border:0; background:#fff; display:none; }
+  #frames iframe.on { display:block; }
+  .ver { font-size:11px; color:var(--sub); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🍵 心茶工作台</h1>
+  <nav id="nav"></nav>
+  <a id="pop" target="_blank" rel="noopener">↗ 單獨開啟這頁</a>
+</header>
+<div id="frames"></div>
+<script>
+// 整合入口：三個工具原本的網址都照常可用（QR 碼、書籤不用改），這裡用分頁把它們放在一起。
+// 每個分頁第一次點開才載入，之後切換不重新載入（填到一半的資料不會不見）。
+const VERSION = 'xintea-hub-2026-11-17-1';
+const TABS = [
+  { id: 'ship',    name: '🚚 B2C 出貨',    url: 'xintea-ship.html' },
+  { id: 'b2b',     name: '📦 B2B 生產回報', url: 'xintea-b2b.html' },
+  { id: 'giftbox', name: '🎁 禮盒・用料',   url: 'xintea-giftbox.html' },
+];
+const nav = document.getElementById('nav'), box = document.getElementById('frames'), pop = document.getElementById('pop');
+const frames = {};
+const qs = new URLSearchParams(location.search);
+// 舊的 B2B 回報 QR（?po=PO-xxxx）如果打到這裡，直接開 B2B 那張單
+if (qs.get('po')) TABS[1].url = 'xintea-b2b.html?po=' + encodeURIComponent(qs.get('po'));
+
+TABS.forEach((t) => {
+  const a = document.createElement('a'); a.href = '#' + t.id; a.textContent = t.name; a.dataset.id = t.id; nav.appendChild(a);
+});
+function show(id) {
+  const t = TABS.find((x) => x.id === id) || TABS[0];
+  if (!frames[t.id]) {
+    const f = document.createElement('iframe'); f.src = t.url; f.title = t.name; f.allow = 'clipboard-write';
+    box.appendChild(f); frames[t.id] = f;
+  }
+  Object.entries(frames).forEach(([k, f]) => f.classList.toggle('on', k === t.id));
+  nav.querySelectorAll('a').forEach((a) => a.classList.toggle('on', a.dataset.id === t.id));
+  pop.href = t.url;
+  document.title = '心茶工作台・' + t.name.replace(/^\S+\s/, '');
+  try { localStorage.setItem('xintea-hub-tab', t.id); } catch (e) {}
+}
+window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+let first = location.hash.slice(1);
+if (!first) { if (qs.get('po')) first = 'b2b'; else { try { first = localStorage.getItem('xintea-hub-tab') || ''; } catch (e) {} } }
+show(first || 'ship');
+if (!location.hash) history.replaceState(null, '', '#' + (TABS.find((x) => x.id === first) || TABS[0]).id);
+</script>
+</body>
+</html>
