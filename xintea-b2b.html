@@ -129,7 +129,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-18-6';
+const APP_VERSION = 'v2026-11-18-7';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
@@ -157,6 +157,8 @@ let BOM = {"v":1,"date":"2026-11-02","materials":{"1010009":{"name":"3g茶包_�
 /* ---------- 工具 ---------- */
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+/** 文字裡的網址變成可點的連結（先 escape，網址可含中文） */
+const linkify = t => esc(t).replace(/https?:\/\/[^\s<>"，。、；）」]+/g, u => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
 const today = () => new Date(Date.now() + 8*3600e3).toISOString().slice(0,10);
 const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const md = d => d ? String(d).slice(5).replace('-','/') : '';
@@ -464,7 +466,8 @@ function shipHtml(p){
     return `<div class="one"><b>${esc(s.no || '配送單')}</b>${s.method ? `　<span class="mut">${esc(s.method)}</span>` : ''}
       ${s.printedAt ? `<span class="tag ok">已列印 ${esc(fmtAt(s.printedAt))}</span>` : '<span class="tag ship">尚未列印</span>'}
       <div class="meta" style="margin-top:4px">託運單：${wb.length ? wb.map((w,i) => `<a href="${esc(w.url)}" target="_blank" rel="noopener">託運單${wb.length > 1 ? ' ' + (i+1) : ''}</a>${w.from ? `<span class="mut">（${esc(w.from)}）</span>` : ''}${w.printedAt ? ' <span class="tag ok">已列印</span>' : ' <span class="tag wait">未列印</span>'}`).join('　') : noWb ? `<span class="mut">${esc(s.method)} 沒有託運單</span>` : '<span class="mut">還沒有</span>'}</div>
-      ${(s.extras || []).length ? `<div style="margin-top:4px"><b>額外列印：</b>${s.extras.map(e => `<div>・${esc(e.text || '')}${e.url ? ` <a href="${esc(e.url)}" target="_blank" rel="noopener">檔案</a>` : ''}　<b>${num(e.copies) || 1} 張</b> ${e.printedAt ? `<span class="tag ok">已列印 ${esc(fmtAt(e.printedAt))}</span>` : '<span class="tag ship">尚未列印</span>'}</div>`).join('')}</div>` : ''}
+      ${(s.remarks || []).filter(Boolean).length ? `<div style="margin-top:4px;white-space:pre-wrap;word-break:break-all"><b>特殊備註：</b>${s.remarks.filter(Boolean).map(linkify).join('\n')}</div>` : ''}
+      ${(s.extras || []).length ? `<div style="margin-top:4px"><b>額外列印：</b>${s.extras.map(e => `<div>・${e.from ? `<span class="mut">（${esc(e.from)}）</span>` : ''}${esc(e.text || '')}${e.url ? ` <a href="${esc(e.url)}" target="_blank" rel="noopener">檔案</a>` : ''}　<b>${num(e.copies) || 1} 張</b> ${e.printedAt ? `<span class="tag ok">已列印 ${esc(fmtAt(e.printedAt))}</span>` : '<span class="tag ship">尚未列印</span>'}</div>`).join('')}</div>` : ''}
     </div>`;
   };
   const head = !shipKnown(p) ? '配送單：還沒查過' : !list.length || list.some(s => !s.printedAt) ? '配送單尚未列印' : need ? '託運單或額外列印單尚未列印' : '配送／託運';
