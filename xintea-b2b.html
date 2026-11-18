@@ -129,7 +129,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-18-5';
+const APP_VERSION = 'v2026-11-18-6';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
@@ -473,6 +473,7 @@ function shipHtml(p){
     ${p.shipCheckedAt ? `<div class="mut">上次搜尋：${esc(fmtAt(p.shipCheckedAt))}${p.shipNote ? '　' + esc(p.shipNote) : ''}</div>` : ''}
     <div class="row" style="margin-top:8px">
       ${need || !shipKnown(p) ? `<button class="btn red" id="printShip" style="padding:7px 14px;font-size:14px">🖨 ${list.length ? '列印還沒印的單據' : '找配送單並列印'}</button>` : ''}
+      ${list.some(s => s.printedAt) ? `<button class="btn gray" id="reprintShip" style="padding:7px 14px;font-size:14px" title="配送單印壞或要多一份時用：重印配送單＋箱貼（一般紙、橫式）">🖨 重印配送單</button>` : ''}
       ${list.some(s => (s.waybill || []).some(w => w && w.url && w.printedAt)) ? `<button class="btn gray" id="reprintWaybill" style="padding:7px 14px;font-size:14px" title="託運單印錯紙時用：重印到 MPC5502_厚紙（手送台）">🖨 重印託運單（厚紙）</button>` : ''}
     </div></div>`;
 }
@@ -647,6 +648,7 @@ function drawForm(p){
   const THICK = '託運單會印到 MPC5502_厚紙（手送台），請先在手送台放厚紙。';
   const wbPending = !shipKnown(p) || shipOf(p).some(s => !s.printedAt || (s.waybill || []).some(w => w && w.url && !w.printedAt));
   if ($('printShip')) $('printShip').onclick = () => { if (wbPending && !confirm('列印還沒印的配送單、託運單、額外列印？\n\n' + THICK)) return; $('printShip').disabled = true; startJob('printShip', {pos:[p.po]}); };
+  if ($('reprintShip')) $('reprintShip').onclick = () => { if (!confirm('重印這張的配送單和箱貼？\n\n託運單、額外列印不會重印。')) return; $('reprintShip').disabled = true; startJob('printShip', {pos:[p.po], reprint:['ship']}); };
   if ($('reprintWaybill')) $('reprintWaybill').onclick = () => { if (!confirm('重印這張的託運單？\n\n' + THICK)) return; $('reprintWaybill').disabled = true; startJob('printShip', {pos:[p.po], reprint:['waybill']}); };
   if ($('fetchDocs')) $('fetchDocs').onclick = () => { $('fetchDocs').disabled = true; startJob('fetchDocs', {pos:[p.po], need: missOf(p)}); };
   if ($('ack')) $('ack').onclick = async () => {
