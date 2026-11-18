@@ -129,7 +129,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-18-4';
+const APP_VERSION = 'v2026-11-18-5';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
@@ -473,6 +473,7 @@ function shipHtml(p){
     ${p.shipCheckedAt ? `<div class="mut">上次搜尋：${esc(fmtAt(p.shipCheckedAt))}${p.shipNote ? '　' + esc(p.shipNote) : ''}</div>` : ''}
     <div class="row" style="margin-top:8px">
       ${need || !shipKnown(p) ? `<button class="btn red" id="printShip" style="padding:7px 14px;font-size:14px">🖨 ${list.length ? '列印還沒印的單據' : '找配送單並列印'}</button>` : ''}
+      ${list.some(s => (s.waybill || []).some(w => w && w.url && w.printedAt)) ? `<button class="btn gray" id="reprintWaybill" style="padding:7px 14px;font-size:14px" title="託運單印錯紙時用：重印到 MPC5502_厚紙（手送台）">🖨 重印託運單（厚紙）</button>` : ''}
     </div></div>`;
 }
 /** 已下載的單據連結：worker 寫入 p.docs = {prod:[{no,url}], ship:[{no,url}]} */
@@ -643,7 +644,10 @@ function drawForm(p){
     <div class="bar"><button class="btn" id="fSubmit">送出這批回報</button></div>`}
   </div>`;
   $('back').onclick = renderList;
-  if ($('printShip')) $('printShip').onclick = () => { $('printShip').disabled = true; startJob('printShip', {pos:[p.po]}); };
+  const THICK = '託運單會印到 MPC5502_厚紙（手送台），請先在手送台放厚紙。';
+  const wbPending = !shipKnown(p) || shipOf(p).some(s => !s.printedAt || (s.waybill || []).some(w => w && w.url && !w.printedAt));
+  if ($('printShip')) $('printShip').onclick = () => { if (wbPending && !confirm('列印還沒印的配送單、託運單、額外列印？\n\n' + THICK)) return; $('printShip').disabled = true; startJob('printShip', {pos:[p.po]}); };
+  if ($('reprintWaybill')) $('reprintWaybill').onclick = () => { if (!confirm('重印這張的託運單？\n\n' + THICK)) return; $('reprintWaybill').disabled = true; startJob('printShip', {pos:[p.po], reprint:['waybill']}); };
   if ($('fetchDocs')) $('fetchDocs').onclick = () => { $('fetchDocs').disabled = true; startJob('fetchDocs', {pos:[p.po], need: missOf(p)}); };
   if ($('ack')) $('ack').onclick = async () => {
     const keys = [...new Set([...(p.ack||[]), ...m.alerts.map(alertKey)])];
