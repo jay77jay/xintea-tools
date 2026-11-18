@@ -129,7 +129,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-18-9';
+const APP_VERSION = 'v2026-11-18-10';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
@@ -559,7 +559,7 @@ const sgPending = (p, pg) => !!p.sgId && !p.sgLocked && pg.tRep > pg.tSg;
 async function commitReps(po, mut, force){
   const build = cur => {
     const nr = mut(repsOf(cur)); const r = rollup(cur, nr, force);
-    return {r, nr, data: {reports: nr, status: r.status, done: r.done, forceDone: !!force, sync: Object.assign({}, cur.sync, {sheet:false}), updatedAt: new Date().toISOString()}};
+    return {r, nr, data: {reports: nr, status: r.status, done: r.done, forceDone: !!force, sync: Object.assign({}, cur.sync, {sg:false, sheet:false}), updatedAt: new Date().toISOString()}};
   };
   if (DEMO){ const cur = Store.cache[po]; const b = build(cur); Object.assign(cur, b.data); return {r: b.r, newReps: b.nr, cur}; }
   const ref = db.collection(COL_PO).doc(po);
@@ -875,7 +875,7 @@ function renderAdmin(){
   const all = Store.list();
   const unsynced = all.filter(p => p.status === 'done' && (!p.sync?.sg || !p.sync?.sheet));
   el.innerHTML = `<div class="card"><h2>同步狀態</h2>
-    <p class="mut">每次回報送出後，工作程式會自動在 SG 補接收這張單（工作程式沒開時，開了之後會接著做）。SG 鎖單和 Google 表回填「已生產日期」照舊。</p>
+    <p class="mut">已完成的採購單：工作程式在 SG 接收數和回報數一致後打勾「SG 已接收」，回填 B2B進度管理表「已生產日期」後打勾「Google 表」（工作程式沒開時，開了之後會接著做）。之後又有人改回報，兩欄會變回待處理、重新同步。</p>
     ${unsynced.length ? `<div class="scroll"><table><tr><th>採購單</th><th>完成日</th><th>SG 已接收</th><th>Google 表</th></tr>
       ${unsynced.map(p => `<tr><td>${esc(p.po)}</td><td>${esc(p.done.date)}</td><td>${p.sync?.sg ? '✔' : '待處理'}</td><td>${p.sync?.sheet ? '✔' : '待處理'}</td></tr>`).join('')}</table></div>` : '<div class="msg ok">全部已同步。</div>'}
     <p class="mut">共 ${all.length} 張採購單，待回報 ${all.filter(p => p.status !== 'done').length} 張。BOM ${Object.keys(BOM.boms).length} 個禮盒、${Object.keys(BOM.materials).length} 種料（來源：${esc(BOM_SRC)}）。版本 ${APP_VERSION}</p></div>`;
