@@ -117,7 +117,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-17-7';
+const APP_VERSION = 'v2026-11-18-1';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
@@ -147,7 +147,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const today = () => new Date(Date.now() + 8*3600e3).toISOString().slice(0,10);
 const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-const md = d => d ? d.slice(5).replace('-','/') : '';
+const md = d => d ? String(d).slice(5).replace('-','/') : '';
 /** 「心茶禮盒生產單_代開-20260824-2」→ 20260824-2 */
 const stripNo = s => { const m = String(s || '').match(/\d{8}-\d+/); return m ? m[0] : String(s || '').replace(/[^\w-]/g, ''); };
 const normPo = s => { const m = String(s || '').match(/(\d{3,})/); return m ? 'PO-' + m[1].padStart(4, '0') : ''; };
@@ -437,6 +437,14 @@ function docLinks(p){
 }
 /* ---------- 完成回報：表單（打開的小卡） ---------- */
 async function openForm(poNo){
+  try { await openFormInner(poNo); }
+  catch(e){
+    console.error('打開採購單失敗', poNo, e);
+    $('v-report').innerHTML = `<div class="msg err">打開 ${esc(poNo)} 失敗：${esc(e.message)}\n請把這個畫面拍照給 Jay。</div><button class="btn gray" id="back">回清單</button>`;
+    $('back').onclick = renderList;
+  }
+}
+async function openFormInner(poNo){
   VIEW = 'report';
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.v === 'report'));
   hideViews(); $('v-report').classList.remove('hidden');
@@ -453,7 +461,7 @@ async function openForm(poNo){
     const mt = matOf(s);
     const base = BOM.boms[s.sku]?.items || {};
     const swaps = [...String(s.changeText||'').matchAll(/([A-Z]{1,2}\d{5,7})\s*換\s*([A-Z]{1,2}\d{5,7})/g)].map(x => `${x[1]}（${BOM.materials[x[1]]?.name||''}）→ ${x[2]}（${BOM.materials[x[2]]?.name||''}）`);
-    const notes = (s.matNote || []).map(n => { const c = n.match(/[A-Z]{1,2}\d{5,7}/)?.[0]; return c && BOM.materials[c] ? n.replace(c, `${c}（${BOM.materials[c].name}）`) : n; });
+    const notes = [].concat(s.matNote || []).map(n => typeof n === 'string' ? n : (n && (n.text || n.note)) || JSON.stringify(n)).map(n => { const c = n.match(/[A-Z]{1,2}\d{5,7}/)?.[0]; return c && BOM.materials[c] ? n.replace(c, `${c}（${BOM.materials[c].name}）`) : n; });
     return `<div class="src"><dl class="kv">
       <dt>生產單</dt><dd><b>${esc(stripNo(s.prodNo))}</b>　${esc(s.sku)}×${s.qty}${s.billedManual ? ` <span class="tag billed">${billedLabel(s.billedManual)}</span>` : ''}</dd>
       ${s.customDesc ? `<dt>客製規格</dt><dd class="hl">${esc(s.customDesc)}</dd>` : ''}
