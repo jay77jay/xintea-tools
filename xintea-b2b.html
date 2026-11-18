@@ -53,6 +53,12 @@ h3{font-size:15px;margin:14px 0 8px}
 .lines .ln{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eee}
 .lines .ln .nm{flex:1;font-size:14px}
 .lines .ln input{width:90px;flex:none;text-align:center}
+.lines .ln .add{flex:none;text-align:center}
+.lines .ln .add small{display:block;font-size:12px;color:var(--g);font-weight:700;margin-bottom:2px}
+.prg{font-size:13px;color:var(--mut);margin-top:2px}
+.prg b{color:#1f2328;font-size:15px}
+.prg .sgp{color:#8a5a00}
+.livenote{background:var(--warn);color:#8a5a00;border-radius:8px;padding:6px 10px;font-size:13px;margin-top:8px}
 .boxes{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
 .bx{border:1px solid var(--bd);border-radius:10px;padding:8px;display:flex;align-items:center;gap:6px}
 .bx .lb{flex:1;font-weight:700;white-space:nowrap;min-width:42px}
@@ -123,7 +129,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-18-3';
+const APP_VERSION = 'v2026-11-18-4';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
@@ -287,7 +293,7 @@ async function boot(){
     .catch(() => firebase.auth().signInWithRedirect(new firebase.auth.GoogleAuthProvider()));
 }
 const VIEWS = ['report','mat','month','admin'];
-function hideViews(){ VIEWS.forEach(v => $('v-' + v).classList.add('hidden')); }
+function hideViews(){ stopFormLive(); VIEWS.forEach(v => $('v-' + v).classList.add('hidden')); }
 function showErr(t){ $('v-report').innerHTML = `<div class="msg err">${esc(t)}</div>`; $('v-report').classList.remove('hidden'); }
 let VIEW = 'report', REPORT_SEEN = false, SORT = 'arrive';
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => { VIEW = b.dataset.v; route(); });
@@ -307,6 +313,7 @@ const SORTS = {
   change: {label:'異動',       fn:(a,b) => (b.m.alerts.length > 0) - (a.m.alerts.length > 0) || (b.m.lastChange||'').localeCompare(a.m.lastChange||'') || (a.m.arrive||'').localeCompare(b.m.arrive||'')}
 };
 function renderList(){
+  stopFormLive();
   const el = $('v-report');
   el.innerHTML = `<div class="card">
       <h2>選擇採購單</h2>
@@ -433,7 +440,8 @@ function itemHtml({p, m}){
   const pg = progress(p);
   const st = p.status === 'done' ? `<span class="tag ok">已完成 ${esc(md(p.done?.date))}</span>`
     : pg.tRep > 0 ? `<span class="tag wait">進行中 ${pg.tRep}／${pg.tOrd}</span>` : `<span class="tag wait">待回報</span>`;
-  const sgWarn = p.status !== 'done' && pg.hasSg && pg.tSg > pg.tRep ? `<span class="tag" style="background:#fdecea;color:#c62828">SG 已接收 ${pg.tSg}，待補回報</span>` : '';
+  const sgWarn = p.status !== 'done' && pg.hasSg && pg.tSg > pg.tRep ? `<span class="tag" style="background:#fdecea;color:#c62828">SG 已接收 ${pg.tSg}，待補回報</span>`
+    : sgPending(p, pg) ? `<span class="tag wait">SG 待接收 ${pg.tRep - pg.tSg}</span>` : '';
   const bar = p.status !== 'done' && pg.tRep > 0 ? `<div style="height:6px;background:#eee;border-radius:3px;margin-top:6px"><div style="height:6px;border-radius:3px;background:var(--g);width:${Math.min(100, pg.tRep/pg.tOrd*100)}%"></div></div>` : '';
   const al = m.alerts.length ? `<div class="alertbar">⚠ 生產單異動 ${m.alerts.length} 項：${esc(m.alerts[0].text.replace(/^生產單 \S+ 列印後有異動：/, ''))}${m.alerts.length > 1 ? '…' : ''}</div>` : '';
   const ms = p.status !== 'done' ? missText(p) : '';
@@ -489,10 +497,93 @@ async function openFormInner(poNo){
   let p = null;
   try { p = await Store.get(poNo); } catch(e){ el.innerHTML = `<div class="msg err">讀取失敗：${esc(e.message)}</div>`; return; }
   if (!p){ el.innerHTML = `<div class="msg err">找不到採購單 ${esc(poNo)}。\n可能還沒同步進系統，請通知 Jay。</div><button class="btn gray" id="back">回清單</button>`; $('back').onclick = renderList; return; }
+  drawForm(p);
+  startFormLive(p.po);
+}
+/* ---------- 即時更新：別人回報後，打開的卡片數字跟著變 ---------- */
+let FORM_UNSUB = null, SG_UNSUB = null, FORM_BUSY = false;
+function stopFormLive(){ if (FORM_UNSUB){ FORM_UNSUB(); FORM_UNSUB = null; } if (SG_UNSUB){ SG_UNSUB(); SG_UNSUB = null; } }
+function startFormLive(po){
+  if (DEMO) return;
+  let first = true;
+  FORM_UNSUB = db.collection(COL_PO).doc(po).onSnapshot(d => {
+    if (first){ first = false; return; }
+    if (!d.exists || d.metadata.hasPendingWrites || FORM_BUSY) return;
+    Store.cache[po] = d.data();
+    if (!$('formPo') || $('formPo').dataset.po !== po) return;
+    if (formDirty()) refreshProgress(d.data());
+    else drawForm(d.data());
+  }, e => console.error('即時更新失敗', e.message));
+}
+/** 正在填寫中（有填數量、箱數、備註或勾選）就不整頁重畫，只更新進度數字 */
+function formDirty(){
+  const el = $('v-report');
+  return [...el.querySelectorAll('.fQty')].some(i => i.value.trim() !== '')
+    || [...el.querySelectorAll('.bx .v')].some(v => num(v.textContent) > 0)
+    || !!($('fNote') && $('fNote').value.trim()) || !!($('fForce') && $('fForce').checked);
+}
+function prgHtml(pg, sku){
+  const ord = pg.ord[sku] || 0, rep = pg.rep[sku] || 0;
+  return `已做 <b>${rep}</b>／${ord}　還沒做 ${Math.max(0, ord - rep)}${pg.hasSg ? `　<span class="${num(pg.sg[sku]) < rep ? 'sgp' : ''}">SG 已接收 ${num(pg.sg[sku])}</span>` : ''}`;
+}
+function refreshProgress(p){
+  const pg = progress(p);
+  $('v-report').querySelectorAll('.prg').forEach(x => x.innerHTML = prgHtml(pg, x.dataset.sku));
+  if ($('liveNote')) $('liveNote').innerHTML = `<div class="livenote">其他人剛回報了，進度已更新（${new Date().toLocaleTimeString('zh-TW', {hour12:false})}）。你填的數字沒有動。</div>`;
+}
+/** 回報比 SG 已接收多（還沒鎖單）＝ SG 待接收 */
+const sgPending = (p, pg) => !!p.sgId && !p.sgLocked && pg.tRep > pg.tSg;
+/** 在資料庫裡改批次清單（交易：以資料庫最新內容為準，多人同時送出不會互相蓋掉） */
+async function commitReps(po, mut, force){
+  const build = cur => {
+    const nr = mut(repsOf(cur)); const r = rollup(cur, nr, force);
+    return {r, nr, data: {reports: nr, status: r.status, done: r.done, forceDone: !!force, sync: Object.assign({}, cur.sync, {sheet:false}), updatedAt: new Date().toISOString()}};
+  };
+  if (DEMO){ const cur = Store.cache[po]; const b = build(cur); Object.assign(cur, b.data); return {r: b.r, newReps: b.nr, cur}; }
+  const ref = db.collection(COL_PO).doc(po);
+  let out = null;
+  await db.runTransaction(async tx => {
+    const d = await tx.get(ref); if (!d.exists) throw new Error('找不到採購單 ' + po);
+    const cur = d.data(); const b = build(cur);
+    tx.set(ref, b.data, {merge:true});
+    out = {r: b.r, newReps: b.nr, cur: Object.assign({}, cur, b.data)};
+  });
+  Store.cache[po] = out.cur;
+  return out;
+}
+/** 回報送出後：請工作程式只針對這張單在 SG 補接收（比差額，重複送也不會多收） */
+async function queueSG(po){
+  const ref = await db.collection(COL_JOB).add({type:'scanSG', pos:[po], auto:'report', status:'queued', createdAt: new Date().toISOString(), by: user ? (user.displayName || user.email) : ''});
+  return ref.id;
+}
+function watchSG(id, po){
+  if (SG_UNSUB) SG_UNSUB();
+  SG_UNSUB = db.collection(COL_JOB).doc(id).onSnapshot(d => {
+    const j = d.data(), el = $('sgStat'); if (!j || !el) return;
+    const r = j.result || {};
+    const lines = a => (a || []).map(esc).join('\n');
+    const mine = a => (a || []).filter(x => String(x).startsWith(po + ' ') || String(x).startsWith(po + '：') || String(x).startsWith(po + '（'));
+    let h = '';
+    if (j.status === 'queued') h = `<div class="msg warn">⏳ 等工作程式接手 SG 接收…\n回報已經存好了。工作程式沒開的話，開了之後會自動補接收，不用重送。</div>`;
+    else if (j.status === 'running') h = `<div class="msg warn">SG 接收中…</div>`;
+    else if (j.status === 'done'){
+      const rec = mine(r.received), more = mine(r.reportMore), sgm = mine(r.sgMore), err = mine(r.errors), lk = mine(r.locked);
+      h = rec.length ? `<div class="msg ok">✔ SG 已接收\n${lines(rec)}</div>` : !more.length && !err.length ? `<div class="msg ok">✔ SG 接收數已和回報一致</div>` : '';
+      if (lk.length) h += `<div class="msg ok">✔ SG 已鎖單（標記為已完成）</div>`;
+      if (more.length) h += `<div class="msg warn">SG 還沒接收（請通知 Jay）\n${lines(more)}</div>`;
+      if (sgm.length) h += `<div class="msg warn">SG 已接收比回報多（請通知 Jay）\n${lines(sgm)}</div>`;
+      if (err.length) h += `<div class="msg err">SG 接收失敗（回報已存好，請通知 Jay）\n${lines(err)}</div>`;
+    }
+    else if (j.status === 'error') h = `<div class="msg err">SG 接收失敗：${esc(j.error || '')}\n回報已存好，請通知 Jay。</div>`;
+    else h = `<div class="msg warn">SG 接收：${esc(j.status)}</div>`;
+    el.innerHTML = h;
+  }, () => {});
+}
+function drawForm(p){
+  const el = $('v-report');
   const m = meta(p);
   const reps = repsOf(p);
   const pg = progress(p);
-  const remain = sku => Math.max(0, (pg.ord[sku]||0) - (pg.rep[sku]||0));
   const boxes = {};
   const srcHtml = s => {
     const mt = matOf(s);
@@ -527,9 +618,12 @@ async function openFormInner(poNo){
     ${docLinks(p)}
     ${cusSrc.length ? `<div class="cusbox"><div class="t">★ 客製化／特殊注意事項</div>${cusSrc.map(srcHtml).join('')}</div>` : ''}
     ${stdSrc.length ? `<div class="card" style="background:#fafafa;margin:10px 0"><div class="mut" style="margin-bottom:4px">標準品</div>${stdSrc.map(srcHtml).join('')}</div>` : ''}
-    <h3>製作進度</h3>
-    <div class="lines">${(p.lines||[]).map(l => `<div class="ln"><div class="nm"><b>${esc(l.sku)}</b> <span class="mut">${esc(l.name||'')}</span></div>
-      <div style="text-align:right;white-space:nowrap"><b>${pg.rep[l.sku]||0}</b>／${l.qty}${pg.hasSg ? `<br><span class="mut">SG 已接收 ${num(pg.sg[l.sku])}</span>` : ''}</div></div>`).join('')}</div>
+    <h3>製作進度${p.status !== 'done' ? '　<span class="mut" style="font-weight:400">做好幾盒，就在「這次＋」填幾盒</span>' : ''}</h3>
+    <div class="lines">${(p.lines||[]).map((l,i) => `<div class="ln"><div class="nm"><b>${esc(l.sku)}</b> <span class="mut">${esc(l.name||'')}</span>
+      <div class="prg" data-sku="${esc(l.sku)}">${prgHtml(pg, l.sku)}</div></div>
+      ${p.status !== 'done' ? `<label class="add"><small>這次＋</small><input type="number" inputmode="numeric" min="0" data-i="${i}" class="fQty" placeholder="0"></label>` : ''}</div>`).join('')}</div>
+    ${sgPending(p, pg) ? `<div class="mut" style="margin-top:6px">SG 待接收 ${pg.tRep - pg.tSg} 盒（工作程式會自動補接收）</div>` : ''}
+    <div id="liveNote"></div>
     ${reps.length ? `<h3>已回報的批次</h3>${reps.map((r,i) => `<div class="sum" style="display:flex;gap:8px;align-items:center"><div style="flex:1">
       第 ${i+1} 批　<b>${esc(r.date)}</b>　${(r.lines||[]).filter(l => num(l.qty)).map(l => esc(l.sku) + '×' + l.qty).join('、') || '—'}<br>
       <span class="mut">${Object.entries(r.boxes||{}).map(([k,v]) => k + ' ' + v).join('、') || '未填箱數'}${r.note ? '　' + esc(r.note) : ''}　${esc(r.by||'')}</span></div>
@@ -538,9 +632,6 @@ async function openFormInner(poNo){
     <h3>回報這一批</h3>
     <p class="mut" style="margin:-4px 0 6px;color:#c62828">完成日期請填實際做完的日期。整張全部做完後，依最後一批的完成日入帳。</p>
     <input type="date" id="fDate" value="${esc(today())}">
-    <h3>這批做好的數量</h3>
-    <div class="lines">${(p.lines||[]).map((l,i) => `<div class="ln"><div class="nm"><b>${esc(l.sku)}</b><br><span class="mut">還沒做 ${remain(l.sku)}</span></div>
-      <input type="number" inputmode="numeric" min="0" data-i="${i}" class="fQty" value="${remain(l.sku)}"></div>`).join('')}</div>
     <h3>這批用了幾箱 <span class="mut">（還沒裝箱可以先不填，最後一批前要填）</span></h3>
     <div class="boxes">${BOX_TYPES.map(b => `<div class="bx" data-k="${b.k}"><div class="lb">${b.k}<small>${b.carton ? '紙箱' : '件數'}</small></div>
       <button data-d="-1">−</button><span class="v">0</span><button data-d="1">＋</button></div>`).join('')}</div>
@@ -558,15 +649,15 @@ async function openFormInner(poNo){
     const keys = [...new Set([...(p.ack||[]), ...m.alerts.map(alertKey)])];
     await Store.save(p.po, {ack: keys}); openForm(p.po);
   };
-  const saveReps = async (newReps, force) => {
-    const r = rollup(p, newReps, force);
-    await Store.save(p.po, {reports: newReps, status: r.status, done: r.done, forceDone: !!force, sync: Object.assign({}, p.sync, {sheet:false})});
-    return r;
-  };
   el.querySelectorAll('.delrep').forEach(b => b.onclick = async () => {
-    const i = +b.dataset.i;
+    const t = reps[+b.dataset.i];
     if (b.dataset.ok !== '1'){ b.dataset.ok = '1'; b.textContent = '確定刪除？'; b.classList.add('red'); return; }
-    await saveReps(reps.filter((_, j) => j !== i), false); openForm(p.po);
+    const same = r => r.at === t.at && r.by === t.by && r.date === t.date;
+    FORM_BUSY = true; b.disabled = true;
+    try { await commitReps(p.po, rs => rs.filter(r => !same(r)), false); }
+    catch(e){ b.disabled = false; alert('刪除失敗：' + e.message); }
+    finally { FORM_BUSY = false; }
+    openForm(p.po);
   });
   if (p.status === 'done') return;
   const drawBoxes = () => {
@@ -581,34 +672,42 @@ async function openFormInner(poNo){
   drawBoxes();
   $('fSubmit').onclick = async () => {
     const date = $('fDate').value, force = $('fForce').checked;
-    const lines = [...el.querySelectorAll('.fQty')].map(inp => ({sku: p.lines[inp.dataset.i].sku, name: p.lines[inp.dataset.i].name || '', qty: num(inp.value)}));
+    const lines = [...el.querySelectorAll('.fQty')].map(inp => ({sku: p.lines[inp.dataset.i].sku, name: p.lines[inp.dataset.i].name || '', qty: inp.value.trim() === '' ? 0 : Number(inp.value)}));
     const t = boxTotals(boxes);
     const errs = [];
     if (!date) errs.push('請填完成日期。');
     if (lines.some(l => l.qty < 0 || !Number.isInteger(l.qty))) errs.push('數量要是 0 以上的整數。');
-    if (!lines.some(l => l.qty > 0) && !force) errs.push('這批數量都是 0。');
+    if (!lines.some(l => l.qty > 0) && !force) errs.push('請在「這次＋」填這批做好的盒數。');
     const cleanBoxes = Object.fromEntries(Object.entries(boxes).filter(([,v]) => num(v) > 0));
     const rec = {date, lines, boxes: cleanBoxes, handling: t.handling, note: $('fNote').value.trim(), by: user ? (user.displayName || user.email) : '試用', at: new Date().toISOString()};
-    const newReps = [...reps, rec];
-    const r = rollup(p, newReps, force);
-    if (r.status === 'done' && !r.done.handling) errs.push('全部做完了，請填用了幾箱（所有批次合計至少 1）。');
+    const latest = Store.cache[p.po] || p, pgL = progress(latest);
+    const remainL = sku => Math.max(0, (pgL.ord[sku]||0) - (pgL.rep[sku]||0));
+    const r0 = rollup(latest, [...repsOf(latest), rec], force);
+    if (r0.status === 'done' && !r0.done.handling) errs.push('全部做完了，請填用了幾箱（所有批次合計至少 1）。');
     if (errs.length){ $('fMsg').innerHTML = `<div class="msg err">${errs.join('\n')}</div>`; return; }
-    const over = lines.filter(l => l.qty > remain(l.sku));
+    const over = lines.filter(l => l.qty > remainL(l.sku));
     const sig = JSON.stringify(over);
     if (over.length && $('fSubmit').dataset.ok !== sig){
-      $('fMsg').innerHTML = `<div class="msg warn">以下數量超過還沒做的數量：\n${over.map(l => `${esc(l.sku)}：還沒做 ${remain(l.sku)}，這批填 ${l.qty}`).join('\n')}\n沒錯的話再按一次「確認送出」。</div>`;
+      $('fMsg').innerHTML = `<div class="msg warn">以下數量超過還沒做的數量：\n${over.map(l => `${esc(l.sku)}：還沒做 ${remainL(l.sku)}，這批填 ${l.qty}`).join('\n')}\n沒錯的話再按一次「確認送出」。</div>`;
       $('fSubmit').dataset.ok = sig; $('fSubmit').textContent = '確認送出'; return;
     }
-    $('fSubmit').disabled = true;
+    $('fSubmit').disabled = true; FORM_BUSY = true;
     try {
-      await saveReps(newReps, force);
-      const pgN = progress(Object.assign({}, p, {reports: newReps}));
+      const {r, cur} = await commitReps(p.po, rs => [...rs, rec], force);
+      const pgN = progress(cur);
+      stopFormLive(); FORM_BUSY = false;
       el.innerHTML = `<div class="card"><div class="msg ok">${esc(p.po)} 這批已回報 ✔（${esc(date)}）\n${r.status === 'done'
         ? `整張全部做完，${esc(r.done.date)} 入帳。訂單處理費合計 ${r.done.handling} 件${Object.keys(boxTotals(r.done.boxes).cartons).length ? '，紙箱 ' + Object.entries(boxTotals(r.done.boxes).cartons).map(([k,v]) => k + ' ' + v).join('、') : ''}。\n紙本採購單照常交回給 Jay。`
-        : `目前進度 ${pgN.tRep}／${pgN.tOrd}，還沒全部做完，先不入帳。`}</div>
-        <button class="btn" id="next">回清單</button></div>`;
+        : `目前進度 ${pgN.tRep}／${pgN.tOrd}（含其他人回報的），還沒全部做完，先不入帳。`}</div>
+        <div id="sgStat"></div>
+        <div class="row"><button class="btn" id="next">回清單</button><button class="btn ghost" id="again">回這張卡片</button></div></div>`;
       $('next').onclick = renderList;
-    } catch(e){ $('fSubmit').disabled = false; $('fMsg').innerHTML = `<div class="msg err">送出失敗：${esc(e.message)}\n請再按一次，或拍照給 Jay。</div>`; }
+      $('again').onclick = () => openForm(p.po);
+      if (!DEMO){
+        try { watchSG(await queueSG(p.po), p.po); }
+        catch(e){ $('sgStat').innerHTML = `<div class="msg warn">SG 接收工作沒排進去（${esc(e.message)}）。回報已存好，之後按「掃描 SG 接收」會補。</div>`; }
+      } else $('sgStat').innerHTML = '<div class="msg warn">試用模式不會送到 SG。</div>';
+    } catch(e){ FORM_BUSY = false; $('fSubmit').disabled = false; $('fMsg').innerHTML = `<div class="msg err">送出失敗：${esc(e.message)}\n請再按一次，或拍照給 Jay。</div>`; }
   };
 }
 
@@ -750,7 +849,7 @@ function renderAdmin(){
   const all = Store.list();
   const unsynced = all.filter(p => p.status === 'done' && (!p.sync?.sg || !p.sync?.sheet));
   el.innerHTML = `<div class="card"><h2>同步狀態</h2>
-    <p class="mut">完成回報後，SG 標「已接收」和 Google 表回填「已生產日期」由 Claude 定時處理。</p>
+    <p class="mut">每次回報送出後，工作程式會自動在 SG 補接收這張單（工作程式沒開時，開了之後會接著做）。SG 鎖單和 Google 表回填「已生產日期」照舊。</p>
     ${unsynced.length ? `<div class="scroll"><table><tr><th>採購單</th><th>完成日</th><th>SG 已接收</th><th>Google 表</th></tr>
       ${unsynced.map(p => `<tr><td>${esc(p.po)}</td><td>${esc(p.done.date)}</td><td>${p.sync?.sg ? '✔' : '待處理'}</td><td>${p.sync?.sheet ? '✔' : '待處理'}</td></tr>`).join('')}</table></div>` : '<div class="msg ok">全部已同步。</div>'}
     <p class="mut">共 ${all.length} 張採購單，待回報 ${all.filter(p => p.status !== 'done').length} 張。BOM ${Object.keys(BOM.boms).length} 個禮盒、${Object.keys(BOM.materials).length} 種料（來源：${esc(BOM_SRC)}）。版本 ${APP_VERSION}</p></div>`;
