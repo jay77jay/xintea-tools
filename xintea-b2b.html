@@ -129,7 +129,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-18-8';
+const APP_VERSION = 'v2026-11-18-9';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
@@ -328,6 +328,7 @@ function renderList(){
       <div class="row" style="margin-top:10px">
         <button class="btn ghost" id="jbNew" title="先預覽：列出這段日期的新訂單和預計建立的 SG 採購單，確認後才建單">🔍 搜尋新訂單（預覽）</button>
         <button class="btn ghost" id="jbSG">📦 掃描 SG 接收</button>
+        <button class="btn ghost" id="jbClean" title="分批出貨的訂單：用配送大表「最早到貨日」重新檢查每張未完成採購單的配送單，不屬於這批的移掉（不會列印、不會改 B2B進度管理表）">🧹 清理抓錯的配送單</button>
       </div>
       <div id="missAll"></div>
       <div class="mut" id="wkState" style="margin-top:6px"></div>
@@ -348,6 +349,7 @@ function renderList(){
   };
   $('q').oninput = draw; draw();
   $('jbSG').onclick = () => startJob('scanSG');
+  $('jbClean').onclick = () => startJob('cleanShip');
   $('jbNew').onclick = () => {
     const to = $('jbTo').value;
     if (!to || to < today()){ $('jobPanel').innerHTML = '<div class="msg err">請設定截止日（不能早於今天）。</div>'; return; }
@@ -367,7 +369,7 @@ function renderList(){
 
 /* ---------- 按鈕工作（由電腦上的 B2B 工作程式執行） ---------- */
 const COL_JOB = 'xintea_b2b_jobs';
-const JOB_NAMES = {scanSG:'掃描 SG 接收', scanNew:'搜尋新訂單', fetchDocs:'搜尋並下載缺少的單據', printShip:'找配送單並列印'};
+const JOB_NAMES = {scanSG:'掃描 SG 接收', scanNew:'搜尋新訂單', fetchDocs:'搜尋並下載缺少的單據', printShip:'找配送單並列印', cleanShip:'清理抓錯的配送單'};
 /** 開單範圍（最早到貨日截止日）：預設今天＋10 天；手動改過的當天內沿用 */
 const LEAD_DAYS = 10;
 function scanRange(){
@@ -389,6 +391,19 @@ async function startJob(type, extra){
   if (DEMO){ $('jobPanel').innerHTML = '<div class="msg warn">試用模式不能執行，請用正式網址。</div>'; return; }
   const ref = await db.collection(COL_JOB).add({...(extra||{}), type, status:'queued', createdAt: new Date().toISOString(), by: user ? (user.displayName || user.email) : ''});
   watchJob(ref.id);
+}
+/** 各工作類型已在上面顯示的 result 欄位；其他字串陣列欄位（例如 cleanShip 的結果、新加的欄位）一律列在「其他結果」 */
+const JOB_SHOWN = {
+  scanSG: ['received','locked','sgMore','reportMore','canLock','errors'],
+  fetchDocs: ['found','still','errors'],
+  printShip: ['printed','still','backfilled','errors'],
+  scanNew: ['created','shipPrinted','shipStill','createdMissing','backfilled','gone','eipMissing','errors','planned','plannedData','printedNotIn','changed','later','skipped']
+};
+const RESULT_NAMES = {removed:'已移除不屬於這批的配送單', still:'還是找不到／沒有變動', errors:'錯誤', warnings:'提醒'};
+function otherResults(j, list){
+  const r = j.result || {}, shown = JOB_SHOWN[j.type] || [];
+  return Object.keys(r).filter(k => !shown.includes(k) && Array.isArray(r[k]) && r[k].length && r[k].every(x => typeof x === 'string'))
+    .map(k => list(RESULT_NAMES[k] || k, r[k], k === 'errors' ? 'err' : /pq|backfill|誤填|warn/i.test(k) ? 'warn' : 'ok')).join('');
 }
 function watchJob(id){
   JOB_ID = id; if (JOB_UNSUB) JOB_UNSUB();
@@ -416,6 +431,7 @@ function watchJob(id){
         ${list('已列印但系統沒有（可能是同仁手動建的）', r.printedNotIn, 'warn')}${list('系統內生產單有異動', r.changed, 'warn')}
         ${list('還沒到開單時間（最早到貨日在截止日之後）', r.later, 'warn')}${list('其他', r.skipped, 'warn')}${list('錯誤', r.errors, 'err')}
         ${(() => { const ok = (r.plannedData||[]).filter(p => !p.trial && !(p.noItem||[]).length); const mc = ok.filter(p => (p.missing||[]).length).length; return ok.length ? `<button class="btn" id="jbApply" data-n="${ok.flatMap(p => p.prodNos).join(',')}">✅ 確認建立 ${ok.length} 張（建 SG 採購單、列印、回填列印日期到 B2B進度管理表${mc ? `；其中 ${mc} 張缺單據，一樣建立` : ''}）</button><div class="mut" id="jbApplyHint"></div>` : ''; })()}` : ''}
+      ${j.status === 'done' ? otherResults(j, list) : ''}
       ${j.error ? `<div class="msg err">${esc(j.error)}</div>` : ''}
       <details ${j.status === 'done' ? '' : 'open'}><summary class="mut">執行紀錄</summary><pre style="white-space:pre-wrap;font-size:12px;margin:6px 0 0">${esc((j.log||[]).join('\n'))}</pre></details></div>`;
     const ap = $('jbApply');
@@ -473,6 +489,7 @@ function shipHtml(p){
   const head = !shipKnown(p) ? '配送單：還沒查過' : !list.length || list.some(s => !s.printedAt) ? '配送單尚未列印' : need ? '託運單或額外列印單尚未列印' : '配送／託運';
   return `<div class="shipbox${need && shipKnown(p) ? ' need' : ''}"><div class="t">🚚 ${head}</div>
     ${list.length ? list.map(one).join('') : `<div class="mut">${shipKnown(p) ? '還找不到這張的配送單，資料先建好了。' : '這張建立時還沒有配送單功能。'}</div>`}
+    ${(p.shipRemoved || []).length ? `<details style="margin-top:6px"><summary class="mut">已移除 ${p.shipRemoved.length} 張不屬於這批的配送單（同一張銷售訂單的其他批次）</summary>${p.shipRemoved.map(x => `<div class="mut">・${esc(x.no || '')}${x.reason ? '　' + esc(x.reason) : ''}${x.at ? '　' + esc(fmtAt(x.at)) : ''}</div>`).join('')}</details>` : ''}
     ${p.shipCheckedAt ? `<div class="mut">上次搜尋：${esc(fmtAt(p.shipCheckedAt))}${p.shipNote ? '　' + esc(p.shipNote) : ''}</div>` : ''}
     <div class="row" style="margin-top:8px">
       ${need || !shipKnown(p) ? `<button class="btn red" id="printShip" style="padding:7px 14px;font-size:14px">🖨 ${list.length ? '列印還沒印的單據' : '找配送單並列印'}</button>` : p.status !== 'done' ? `<button class="btn gray" id="printShip" style="padding:7px 14px;font-size:14px" title="重新讀配送大表（物流單下載連結、特殊備註），有新的託運單或額外列印就補印；已印過的不重印">🔄 重新查配送大表並補印</button>` : ''}
