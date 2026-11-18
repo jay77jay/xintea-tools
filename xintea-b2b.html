@@ -86,6 +86,12 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
 .missbar{background:#fdecea;color:var(--red);font-weight:700;padding:6px 12px;font-size:14px;border-bottom:1px solid #f3c2bd}
 .missbox{border:2px dashed var(--red);background:#fff8f7;border-radius:10px;padding:10px 12px;margin:10px 0}
 .missbox .t{color:var(--red);font-weight:700;font-size:16px;margin-bottom:4px}
+.shipbox{border:2px solid #9bb7e0;background:#f5f8fd;border-radius:10px;padding:10px 12px;margin:10px 0}
+.shipbox.need{border:2px dashed var(--red);background:#fff8f7}
+.shipbox .t{font-weight:700;font-size:16px;margin-bottom:4px}
+.shipbox .one{padding:6px 0;border-top:1px dashed #c9d6ea}
+.shipbox .one:first-of-type{border-top:0}
+.tag.ship{background:#fdecea;color:var(--red);font-weight:700}
 .dates{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
 .dates .lbl{flex:0 0 100%}
 .dates input{width:auto;flex:1;min-width:0;padding:7px}
@@ -117,7 +123,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-18-1';
+const APP_VERSION = 'v2026-11-18-2';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   {k:'黑貓', carton:false}, {k:'LALA', carton:false}, {k:'A20', carton:false},
@@ -159,6 +165,14 @@ const alertKey = a => a.at + '|' + a.text;
 const DOC_NAMES = {prod:'生產單', ship:'託運單'};
 const missOf = p => (p.missing || []).filter(k => DOC_NAMES[k]);
 const missText = p => missOf(p).map(k => DOC_NAMES[k]).join('、');
+/** 配送單：worker 寫入 p.ship = [{no, method, printedAt, waybill:[{url, from, printedAt}], extras:[{text, url, copies, printedAt}]}]
+ *  p.ship 沒有這個欄位＝還沒查過（舊資料）；空陣列＝查過但還找不到配送單 */
+const shipOf = p => Array.isArray(p.ship) ? p.ship.filter(Boolean) : [];
+const shipKnown = p => Array.isArray(p.ship);
+/** 還有沒印的配送單或額外列印單（託運單另外算，要先放厚紙） */
+const shipUnprinted = p => !shipOf(p).length || shipOf(p).some(s => !s.printedAt || (s.extras || []).some(e => !e.printedAt));
+const waybillUnprinted = p => shipOf(p).some(s => (s.waybill || []).some(w => w.url && !w.printedAt));
+const fmtAt = v => { if (!v) return ''; const d = new Date(v); return isNaN(d) ? String(v) : d.toLocaleString('zh-TW', {hour12:false, month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'}); };
 const billedLabel = v => { const m = String(v).match(/^\d{4}-(\d{2})$/); return m ? `已入${+m[1]}月帳` : '已入帳'; };
 
 /** 每張採購單的衍生資訊 */
@@ -345,7 +359,7 @@ function renderList(){
 
 /* ---------- 按鈕工作（由電腦上的 B2B 工作程式執行） ---------- */
 const COL_JOB = 'xintea_b2b_jobs';
-const JOB_NAMES = {scanSG:'掃描 SG 接收', scanNew:'搜尋新訂單', fetchDocs:'搜尋並下載缺少的單據'};
+const JOB_NAMES = {scanSG:'掃描 SG 接收', scanNew:'搜尋新訂單', fetchDocs:'搜尋並下載缺少的單據', printShip:'找配送單並列印'};
 /** 開單範圍（最早到貨日截止日）：預設今天＋10 天；手動改過的當天內沿用 */
 const LEAD_DAYS = 10;
 function scanRange(){
@@ -384,8 +398,10 @@ function watchJob(id){
       ${j.type === 'scanNew' && (j.arriveTo || r.arriveTo) ? `<div class="mut">開單範圍：最早到貨日 ${esc(j.arriveTo || r.arriveTo)}（含）以前</div>` : ''}
       ${j.type === 'fetchDocs' && j.status === 'done' ? `<div class="msg ok">搜尋 ${(j.pos||[]).length} 張採購單的單據。</div>
         ${list('已找到並下載', r.found, 'ok')}${list('還是找不到', r.still, 'warn')}${list('錯誤', r.errors, 'err')}` : ''}
+      ${j.type === 'printShip' && j.status === 'done' ? `<div class="msg ok">處理 ${(j.pos||[]).length} 張採購單的配送單${j.waybill ? '（含託運單）' : ''}。</div>
+        ${list('已列印', r.printed, 'ok')}${list('還是找不到（卡片會繼續標示，之後可再按）', r.still, 'warn')}${list('已回填 B2B進度管理表', r.backfilled, 'ok')}${list('錯誤', r.errors, 'err')}` : ''}
       ${j.type === 'scanNew' && j.status === 'done' && j.apply ? `<div class="msg ok">正式執行完成。</div>
-        ${list('已建立並送印', r.created, 'ok')}${list('已建立但缺單據（卡片會標示，之後可再搜尋下載）', r.createdMissing, 'warn')}${list('已回填 B2B進度管理表', r.backfilled, 'ok')}
+        ${list('已建立並送印', r.created, 'ok')}${list('配送單已列印', r.shipPrinted, 'ok')}${list('配送單還找不到（卡片會標示「配送單尚未列印」）', r.shipStill, 'warn')}${list('已建立但缺單據（卡片會標示，之後可再搜尋下載）', r.createdMissing, 'warn')}${list('已回填 B2B進度管理表', r.backfilled, 'ok')}
         ${list('已不是待開單、跳過', r.gone, 'warn')}${list('EIP 還查不到的生產單', r.eipMissing, 'warn')}${list('錯誤', r.errors, 'err')}` : ''}
       ${j.type === 'scanNew' && j.status === 'done' && !j.apply ? `<div class="msg ok">預覽完成（還沒有建單、列印或回填）。</div>
         ${list('預計建立的 SG 採購單', r.planned, 'ok')}${list('缺生產單或託運單（一樣會建立，卡片標示缺什麼）', (r.plannedData||[]).filter(p => (p.missing||[]).length).map(p => p.prodNos.map(stripNo).join('、') + '　缺' + p.missing.map(k => DOC_NAMES[k] || k).join('、')), 'warn')}${list('EIP 還查不到的生產單', r.eipMissing, 'warn')}
@@ -409,7 +425,7 @@ function watchJob(id){
     $('jbClose').onclick = () => { if (JOB_UNSUB) JOB_UNSUB(); JOB_ID = null; el.innerHTML = ''; };
     if (j.status === 'done' && !d.metadata.hasPendingWrites && !watchJob.reloaded?.[id]){
       (watchJob.reloaded = watchJob.reloaded || {})[id] = true;
-      await Store.loadAll(); if (VIEW === 'report' && $('listOpen')) renderList(); else if (VIEW === 'report' && $('missBox') && j.type === 'fetchDocs') openForm($('missBox').dataset.po);
+      await Store.loadAll(); if (VIEW === 'report' && $('listOpen')) renderList(); else if (VIEW === 'report' && $('formPo') && (j.type === 'fetchDocs' || j.type === 'printShip')) openForm($('formPo').dataset.po);
     }
   });
 }
@@ -423,13 +439,36 @@ function itemHtml({p, m}){
   const al = m.alerts.length ? `<div class="alertbar">⚠ 生產單異動 ${m.alerts.length} 項：${esc(m.alerts[0].text.replace(/^生產單 \S+ 列印後有異動：/, ''))}${m.alerts.length > 1 ? '…' : ''}</div>` : '';
   const ms = p.status !== 'done' ? missText(p) : '';
   const mb = ms ? `<div class="missbar">📄 缺${esc(ms)}　點開可搜尋下載</div>` : '';
+  const sp = p.status !== 'done' && shipKnown(p) && shipUnprinted(p) ? `<span class="tag ship">${shipOf(p).length ? '配送單未印' : '配送單尚未列印'}</span>` : '';
   return `<button class="po-item${m.alerts.length ? ' alert' : ''}${m.custom ? ' cus' : ''}" data-po="${esc(p.po)}">${al}${mb}<div class="in">
-    <b>${esc(p.po)}</b>${st}${ms ? `<span class="tag miss">缺${esc(ms)}</span>` : ''}${m.custom ? '<span class="tag cus">客製</span>' : ''}${m.billedAll ? `<span class="tag billed">${m.billedTag}</span>` : m.billedSome ? `<span class="tag billed">部分${m.billedTag}</span>` : ''}${sgWarn}<br>
+    <b>${esc(p.po)}</b>${st}${ms ? `<span class="tag miss">缺${esc(ms)}</span>` : ''}${sp}${m.custom ? '<span class="tag cus">客製</span>' : ''}${m.billedAll ? `<span class="tag billed">${m.billedTag}</span>` : m.billedSome ? `<span class="tag billed">部分${m.billedTag}</span>` : ''}${sgWarn}<br>
     <span>${esc(p.customer||'')}</span> · <span class="mut">${(p.lines||[]).map(l => esc(l.sku) + '×' + l.qty).join('、')}（共 ${qty}）</span>
     <div class="meta"><span>新增 <b>${esc(m.added || '—')}</b></span><span>最早到貨 <b>${esc(md(m.arrive) || '—')}</b></span><span>製作 ${esc(md(p.date))}</span></div>${bar}
   </div></button>`;
 }
 
+/** 配送／託運區塊（打開的小卡） */
+function shipHtml(p){
+  const list = shipOf(p);
+  const need = p.status !== 'done' && shipUnprinted(p);
+  const one = s => {
+    const wb = (s.waybill || []).filter(w => w && w.url);
+    const noWb = /lalamove|專車|自取/i.test(s.method || '');
+    return `<div class="one"><b>${esc(s.no || '配送單')}</b>${s.method ? `　<span class="mut">${esc(s.method)}</span>` : ''}
+      ${s.printedAt ? `<span class="tag ok">已列印 ${esc(fmtAt(s.printedAt))}</span>` : '<span class="tag ship">尚未列印</span>'}
+      <div class="meta" style="margin-top:4px">託運單：${wb.length ? wb.map((w,i) => `<a href="${esc(w.url)}" target="_blank" rel="noopener">託運單${wb.length > 1 ? ' ' + (i+1) : ''}</a>${w.from ? `<span class="mut">（${esc(w.from)}）</span>` : ''}${w.printedAt ? ' <span class="tag ok">已列印</span>' : ' <span class="tag wait">未列印</span>'}`).join('　') : noWb ? `<span class="mut">${esc(s.method)} 沒有託運單</span>` : '<span class="mut">還沒有</span>'}</div>
+      ${(s.extras || []).length ? `<div style="margin-top:4px"><b>額外列印：</b>${s.extras.map(e => `<div>・${esc(e.text || '')}${e.url ? ` <a href="${esc(e.url)}" target="_blank" rel="noopener">檔案</a>` : ''}　<b>${num(e.copies) || 1} 張</b> ${e.printedAt ? `<span class="tag ok">已列印 ${esc(fmtAt(e.printedAt))}</span>` : '<span class="tag ship">尚未列印</span>'}</div>`).join('')}</div>` : ''}
+    </div>`;
+  };
+  const head = !shipKnown(p) ? '配送單：還沒查過' : !list.length || list.some(s => !s.printedAt) ? '配送單尚未列印' : need ? '額外列印單尚未列印' : '配送／託運';
+  return `<div class="shipbox${need && shipKnown(p) ? ' need' : ''}"><div class="t">🚚 ${head}</div>
+    ${list.length ? list.map(one).join('') : `<div class="mut">${shipKnown(p) ? '還找不到這張的配送單，資料先建好了。' : '這張建立時還沒有配送單功能。'}</div>`}
+    ${p.shipCheckedAt ? `<div class="mut">上次搜尋：${esc(fmtAt(p.shipCheckedAt))}${p.shipNote ? '　' + esc(p.shipNote) : ''}</div>` : ''}
+    <div class="row" style="margin-top:8px">
+      ${need || !shipKnown(p) ? `<button class="btn red" id="printShip" style="padding:7px 14px;font-size:14px">🖨 ${list.length ? '列印還沒印的單據' : '找配送單並列印'}</button>` : ''}
+      ${waybillUnprinted(p) ? `<button class="btn gray" id="printWaybill" style="padding:7px 14px;font-size:14px">🖨 印託運單（先放厚紙）</button>` : ''}
+    </div></div>`;
+}
 /** 已下載的單據連結：worker 寫入 p.docs = {prod:[{no,url}], ship:[{no,url}]} */
 function docLinks(p){
   const rows = Object.entries(DOC_NAMES).flatMap(([k, n]) => ((p.docs||{})[k] || []).filter(d => d && d.url).map(d => `<a href="${esc(d.url)}" target="_blank" rel="noopener">${n} ${esc(stripNo(d.no) || d.no || '')}</a>`));
@@ -476,7 +515,7 @@ async function openFormInner(poNo){
   const cusSrc = srcOf(p).filter(s => s.custom || s.changeText);
   const stdSrc = srcOf(p).filter(s => !(s.custom || s.changeText));
   el.innerHTML = `<div class="card">
-    <button class="btn gray" id="back" style="padding:6px 12px;font-size:13px">← 清單</button>
+    <button class="btn gray" id="back" style="padding:6px 12px;font-size:13px">← 清單</button><span id="formPo" data-po="${esc(p.po)}"></span>
     <h2 style="margin-top:10px">${esc(p.po)} ${m.custom ? '<span class="tag cus">客製</span>' : ''} ${p.status === 'done' ? '<span class="tag ok">已全部做完</span>' : pg.tRep ? `<span class="tag wait">進行中 ${pg.tRep}／${pg.tOrd}</span>` : ''}</h2>
     <div>${esc(p.customer||'')}</div>
     <div class="meta"><span>新增 <b>${esc(m.added||'—')}</b></span><span>最早到貨 <b>${esc(md(m.arrive)||'—')}</b></span><span>製作 ${esc(md(p.date))}</span></div>
@@ -484,7 +523,9 @@ async function openFormInner(poNo){
       <button class="btn red" id="ack" style="margin-top:8px;padding:7px 14px;font-size:14px">我已確認異動</button></div>` : ''}
     ${missOf(p).length ? `<div class="missbox" id="missBox" data-po="${esc(p.po)}"><div class="t">📄 缺${esc(missText(p))}</div>
       <div class="mut">建立時還找不到${esc(missText(p))}，資料先建好了。${p.missingCheckedAt ? '上次搜尋：' + esc(new Date(p.missingCheckedAt).toLocaleString('zh-TW', {hour12:false})) : ''}</div>
-      <button class="btn red" id="fetchDocs" style="margin-top:8px;padding:7px 14px;font-size:14px">🔍 搜尋並下載${esc(missText(p))}</button><div id="jobPanel"></div></div>` : ''}
+      <button class="btn red" id="fetchDocs" style="margin-top:8px;padding:7px 14px;font-size:14px">🔍 搜尋並下載${esc(missText(p))}</button></div>` : ''}
+    ${shipHtml(p)}
+    <div id="jobPanel"></div>
     ${docLinks(p)}
     ${cusSrc.length ? `<div class="cusbox"><div class="t">★ 客製化／特殊注意事項</div>${cusSrc.map(srcHtml).join('')}</div>` : ''}
     ${stdSrc.length ? `<div class="card" style="background:#fafafa;margin:10px 0"><div class="mut" style="margin-bottom:4px">標準品</div>${stdSrc.map(srcHtml).join('')}</div>` : ''}
@@ -513,6 +554,11 @@ async function openFormInner(poNo){
     <div class="bar"><button class="btn" id="fSubmit">送出這批回報</button></div>`}
   </div>`;
   $('back').onclick = renderList;
+  if ($('printShip')) $('printShip').onclick = () => { $('printShip').disabled = true; startJob('printShip', {pos:[p.po]}); };
+  if ($('printWaybill')) $('printWaybill').onclick = () => {
+    const b = $('printWaybill'); if (!b.dataset.armed){ b.dataset.armed = 1; b.textContent = '已放好厚紙？再按一次開始列印'; return; }
+    b.disabled = true; startJob('printShip', {pos:[p.po], waybill:true});
+  };
   if ($('fetchDocs')) $('fetchDocs').onclick = () => { $('fetchDocs').disabled = true; startJob('fetchDocs', {pos:[p.po], need: missOf(p)}); };
   if ($('ack')) $('ack').onclick = async () => {
     const keys = [...new Set([...(p.ack||[]), ...m.alerts.map(alertKey)])];
