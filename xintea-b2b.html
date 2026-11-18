@@ -385,13 +385,13 @@ function watchJob(id){
       ${j.type === 'fetchDocs' && j.status === 'done' ? `<div class="msg ok">搜尋 ${(j.pos||[]).length} 張採購單的單據。</div>
         ${list('已找到並下載', r.found, 'ok')}${list('還是找不到', r.still, 'warn')}${list('錯誤', r.errors, 'err')}` : ''}
       ${j.type === 'scanNew' && j.status === 'done' && j.apply ? `<div class="msg ok">正式執行完成。</div>
-        ${list('已建立並送印', r.created, 'ok')}${list('已建立但缺單據（卡片會標示，之後可再搜尋下載）', r.createdMissing, 'warn')}${list('已回填生產單大表', r.backfilled, 'ok')}
+        ${list('已建立並送印', r.created, 'ok')}${list('已建立但缺單據（卡片會標示，之後可再搜尋下載）', r.createdMissing, 'warn')}${list('已回填 B2B進度管理表', r.backfilled, 'ok')}
         ${list('已不是待開單、跳過', r.gone, 'warn')}${list('EIP 還查不到的生產單', r.eipMissing, 'warn')}${list('錯誤', r.errors, 'err')}` : ''}
       ${j.type === 'scanNew' && j.status === 'done' && !j.apply ? `<div class="msg ok">預覽完成（還沒有建單、列印或回填）。</div>
         ${list('預計建立的 SG 採購單', r.planned, 'ok')}${list('缺生產單或託運單（一樣會建立，卡片標示缺什麼）', (r.plannedData||[]).filter(p => (p.missing||[]).length).map(p => p.prodNos.map(stripNo).join('、') + '　缺' + p.missing.map(k => DOC_NAMES[k] || k).join('、')), 'warn')}${list('EIP 還查不到的生產單', r.eipMissing, 'warn')}
         ${list('已列印但系統沒有（可能是同仁手動建的）', r.printedNotIn, 'warn')}${list('系統內生產單有異動', r.changed, 'warn')}
         ${list('還沒到開單時間（最早到貨日在截止日之後）', r.later, 'warn')}${list('其他', r.skipped, 'warn')}${list('錯誤', r.errors, 'err')}
-        ${(() => { const ok = (r.plannedData||[]).filter(p => !p.trial && !(p.noItem||[]).length); const mc = ok.filter(p => (p.missing||[]).length).length; return ok.length ? `<button class="btn" id="jbApply" data-n="${ok.flatMap(p => p.prodNos).join(',')}">✅ 確認建立 ${ok.length} 張（建 SG 採購單、列印、回填列印日期${mc ? `；其中 ${mc} 張缺單據，一樣建立` : ''}）</button><div class="mut" id="jbApplyHint"></div>` : ''; })()}` : ''}
+        ${(() => { const ok = (r.plannedData||[]).filter(p => !p.trial && !(p.noItem||[]).length); const mc = ok.filter(p => (p.missing||[]).length).length; return ok.length ? `<button class="btn" id="jbApply" data-n="${ok.flatMap(p => p.prodNos).join(',')}">✅ 確認建立 ${ok.length} 張（建 SG 採購單、列印、回填列印日期到 B2B進度管理表${mc ? `；其中 ${mc} 張缺單據，一樣建立` : ''}）</button><div class="mut" id="jbApplyHint"></div>` : ''; })()}` : ''}
       ${j.error ? `<div class="msg err">${esc(j.error)}</div>` : ''}
       <details ${j.status === 'done' ? '' : 'open'}><summary class="mut">執行紀錄</summary><pre style="white-space:pre-wrap;font-size:12px;margin:6px 0 0">${esc((j.log||[]).join('\n'))}</pre></details></div>`;
     const ap = $('jbApply');
