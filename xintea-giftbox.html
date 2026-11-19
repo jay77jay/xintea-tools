@@ -681,6 +681,23 @@
           </div>
         </div>
       </div>
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line);">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+          <label style="font-size:12.5px;color:var(--ink-soft);">品名修正表（EIP 品名有錯時，上傳正確的「料號／品名」對照 Excel；對照表、匯出 SG採購單、健康檢查補登、採購單彙整都會改用這裡的品名）</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="file" id="name-fix-file" accept=".xlsx,.xls" style="display:none;">
+            <button class="btn-ghost" id="name-fix-upload-btn" style="padding:5px 12px;font-size:12px;">上傳品名修正表</button>
+            <button class="btn-ghost" id="toggle-name-fix-btn" style="padding:5px 12px;font-size:12px;">顯示修正表</button>
+            <button class="btn-ghost" id="name-fix-clear-btn" style="padding:5px 12px;font-size:12px;">清空</button>
+          </div>
+        </div>
+        <div class="msg" id="name-fix-msg" style="margin-top:8px;"></div>
+        <div id="name-fix-wrap" style="display:none;margin-top:10px;">
+          <div class="table-scroll">
+            <table id="name-fix-table"></table>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -842,6 +859,9 @@
 <script>
 // ============================================================
 // 版本紀錄（每次有邏輯或功能異動，記得在這裡加一行＋更新 APP_VERSION）
+// v1.21.0（2026-11-19）：新增「品名修正表」（卡片7）：廠商說 EIP 品名有錯、另給修正 Excel（料號／EIP品名），上傳後
+//                        對照表、CSV、匯出 SG採購單、健康檢查補登、採購單彙整列印都優先用修正後品名；存雲端，大家共用。
+//                        另修正品名抓「最舊快照」的問題，改抓最新快照（EIP 改正後才會跟著更新）
 // v1.20.0（2026-11-17）：★修正增加數比對（11/16 抓 14 天 → 11/17 抓 3 天，增加數變 -137、紅框誤報 A020011/AA00342/AA00344）：
 //                        1. 範圍天數不同時，超出這次範圍（看訂單自己的製作許可日）的訂單不再算成減少、不進紅框；
 //                           減少只剩「算過的訂單數量真的變少（且還在範圍內）」或「算過的訂單被刪除」
@@ -994,8 +1014,8 @@
 //                        忽略原因下拉選單、紅框警示掃描全部歷史快照
 // v1.0.0：初始版本（新增/異動/刪除/結案判斷、均茂排除、SG採購單匯出、全品項健康檢查）
 // ============================================================
-const APP_VERSION = 'v1.20.0';
-const APP_VERSION_DATE = '2026-11-17';
+const APP_VERSION = 'v1.21.0';
+const APP_VERSION_DATE = '2026-11-19';
 console.log(`心茶 出貨 禮盒製作每日增加數 ${APP_VERSION}（${APP_VERSION_DATE}）`);
 
 const STORAGE_KEY = 'xincha-giftbox-snapshots';
@@ -1022,6 +1042,9 @@ let warehouseReceivedTotal = {}; // sku -> 累計已登記的均茂到貨數量�
 const WAREHOUSE_RECEIVED_KEY = 'xincha-warehouse-received-total';
 let dismissedVanishedOrders = {}; // "prevUploadedAt|latestUploadedAt|orderNo" -> true，已處理過的「訂單消失」警示
 const VANISHED_ORDER_DISMISS_KEY = 'xincha-dismissed-vanished-orders';
+let nameFix = {}; // sku -> 正確品名（EIP 品名有錯時，以廠商提供的修正檔為準；顯示/匯出/列印一律優先用這裡）
+const NAME_FIX_KEY = 'xincha-name-fix';
+function boxName(sku, name){ return nameFix[String(sku||'').trim().toUpperCase()] || name || ''; }
 
 function setTableSort(key){
   if (tableSortState.key === key){
@@ -1672,6 +1695,20 @@ async function loadExcessStock(){
   }
 }
 
+async function loadNameFix(){
+  try {
+    const res = await storageGet(NAME_FIX_KEY);
+    nameFix = res && res.value ? JSON.parse(res.value) : {};
+  } catch(e){
+    nameFix = {};
+  }
+}
+
+async function saveNameFix(){
+  const ok = await storageSet(NAME_FIX_KEY, JSON.stringify(nameFix));
+  return !!ok;
+}
+
 async function saveExcessStock(){
   const ok = await storageSet(EXCESS_STOCK_KEY, JSON.stringify(excessStock));
   return !!ok;
@@ -2307,6 +2344,76 @@ function readXlsxRows(file){
   });
 }
 
+// ---------- 品名修正表 ----------
+function renderNameFix(keepMsg){
+  const entries = Object.entries(nameFix).sort((a,b) => a[0].localeCompare(b[0], undefined, {numeric:true}));
+  const msgEl = document.getElementById('name-fix-msg');
+  if (!keepMsg){
+    msgEl.className = 'msg show' + (entries.length ? ' ok' : '');
+    msgEl.textContent = entries.length
+      ? `目前有 ${entries.length} 個料號使用修正後的品名。`
+      : '目前沒有品名修正，品名一律用最新上傳總表的 EIP 品名。';
+  }
+  document.getElementById('name-fix-table').innerHTML = entries.length
+    ? '<thead><tr><th>料號</th><th>修正後品名</th></tr></thead><tbody>' +
+      entries.map(([sku,name]) => `<tr><td>${escapeHtml(sku)}</td><td>${escapeHtml(name)}</td></tr>`).join('') + '</tbody>'
+    : '';
+}
+
+document.getElementById('name-fix-upload-btn').addEventListener('click', () => document.getElementById('name-fix-file').click());
+document.getElementById('name-fix-file').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  const msgEl = document.getElementById('name-fix-msg');
+  try {
+    const aoa = await readXlsxRows(file);
+    let hi = -1, idxSku = -1, idxName = -1;
+    for (let i = 0; i < Math.min(aoa.length, 10); i++){
+      const h = (aoa[i] || []).map(c => String(c||'').trim());
+      const si = ['料號','庫存SKU','商品編號','SKU'].map(k => h.indexOf(k)).find(x => x !== -1);
+      const ni = ['EIP品名','品名','庫存貨品名稱','商品名稱'].map(k => h.indexOf(k)).find(x => x !== -1);
+      if (si !== undefined && ni !== undefined){ hi = i; idxSku = si; idxName = ni; break; }
+    }
+    if (hi === -1) throw new Error('找不到「料號」和「品名」（或 EIP品名）欄位');
+    const incoming = {};
+    for (let i = hi + 1; i < aoa.length; i++){
+      const row = aoa[i] || [];
+      const sku = String(row[idxSku]||'').trim().toUpperCase();
+      const name = String(row[idxName]||'').trim();
+      if (sku && name) incoming[sku] = name;
+    }
+    const n = Object.keys(incoming).length;
+    if (!n) throw new Error('檔案裡沒有任何料號／品名資料');
+    const changed = Object.keys(incoming).filter(k => nameFix[k] !== incoming[k]);
+    const preview = changed.slice(0, 10).map(k => `${k}：${incoming[k]}`).join('\n');
+    if (!confirm(`讀到 ${n} 個料號，其中 ${changed.length} 個品名會新增或更新${preview ? '：\n\n' + preview + (changed.length > 10 ? '\n…' : '') : ''}\n\n同料號以這份檔案為準，其他料號保留。確定要套用嗎？`)) return;
+    Object.assign(nameFix, incoming);
+    if (!(await saveNameFix())) throw new Error('儲存失敗');
+    msgEl.className = 'msg show ok';
+    msgEl.textContent = `已套用 ${file.name}：${n} 個料號（${changed.length} 個新增或更新）。之後匯出的 SG採購單會用新品名；SG 系統裡已經建好的品項名稱要另外到 SG 改。`;
+    renderNameFix(true);
+    render();
+  } catch(err){
+    msgEl.className = 'msg show err';
+    msgEl.textContent = '品名修正表讀取失敗：' + (err && err.message || err);
+  }
+});
+document.getElementById('toggle-name-fix-btn').addEventListener('click', (e) => {
+  const wrap = document.getElementById('name-fix-wrap');
+  const showing = wrap.style.display !== 'none';
+  wrap.style.display = showing ? 'none' : 'block';
+  e.target.textContent = showing ? '顯示修正表' : '隱藏修正表';
+});
+document.getElementById('name-fix-clear-btn').addEventListener('click', async () => {
+  if (!Object.keys(nameFix).length) return;
+  if (!confirm('確定要清空品名修正表嗎？清空後品名會改回用 EIP 品名。')) return;
+  nameFix = {};
+  await saveNameFix();
+  renderNameFix();
+  render();
+});
+
 document.getElementById('healthcheck-run-btn').addEventListener('click', async () => {
   const resultEl = document.getElementById('healthcheck-result');
   const files = Array.from(document.getElementById('healthcheck-input').files || []);
@@ -2429,7 +2536,7 @@ document.getElementById('healthcheck-run-btn').addEventListener('click', async (
     document.getElementById('healthcheck-export-btn').addEventListener('click', () => {
       const exportRows = [['庫存SKU','庫存貨品名稱','數量','成本','供應商SKU','稅款']];
       const sortedGapRows = [...gapRows].sort((a,b) => String(a.sku).localeCompare(String(b.sku), undefined, {numeric:true}));
-      sortedGapRows.forEach(r => exportRows.push([r.sku, r.name, r.gap, '0', '', '']));
+      sortedGapRows.forEach(r => exportRows.push([r.sku, boxName(r.sku, r.name), r.gap, '0', '', '']));
       const ws = XLSX.utils.aoa_to_sheet(exportRows);
       ws['!cols'] = [{wch:12},{wch:45},{wch:8},{wch:8},{wch:12},{wch:8}];
       const wb = XLSX.utils.book_new();
@@ -2509,6 +2616,7 @@ document.getElementById('po-summary-parse-btn').addEventListener('click', async 
       }
     }
     Object.values(detailBySku).forEach(list => list.sort((a,b) => a.sortKey.localeCompare(b.sortKey)));
+    Object.keys(outstanding).forEach(sku => { nameBySku[sku] = boxName(sku, nameBySku[sku]); }); // SG 品項主檔品名有錯時，列印給製作組的以品名修正表為準
 
     const skuList = Object.entries(outstanding).sort((a,b) => a[0].localeCompare(b[0]));
     if (!skuList.length){
@@ -3423,7 +3531,7 @@ function render(){
 
   // union of all SKUs across all snapshots (含比對後才會出現的品項)；只保留 A/B 開頭的禮盒，過濾掉舊資料可能殘留的料件
   const allSkus = new Map(); // sku -> name
-  snapshots.forEach(s => {
+  [...snapshots].reverse().forEach(s => { // 最新快照的品名優先（EIP 改正後跟著更新）
     Object.entries(s.items).forEach(([sku,info]) => {
       if (!isBoxSku(sku)) return;
       if (!allSkus.has(sku) || !allSkus.get(sku)) allSkus.set(sku, info.name);
@@ -3431,6 +3539,7 @@ function render(){
   });
   if (prevRecon) Object.entries(prevRecon.names).forEach(([sku,name]) => { if (isBoxSku(sku) && name && !allSkus.get(sku)) allSkus.set(sku, name); });
   Object.entries(baseRecon.names).forEach(([sku,name]) => { if (isBoxSku(sku) && name && !allSkus.get(sku)) allSkus.set(sku, name); });
+  allSkus.forEach((name, sku) => allSkus.set(sku, boxName(sku, name)));
 
   // ----- hero card: the ONE number that matters -----
   heroCard.style.display = '';
@@ -3735,11 +3844,13 @@ document.getElementById('export-btn').addEventListener('click', () => {
   const prev = snapshots.length >= 2 ? snapshots[snapshots.length-2] : null;
   const prevRecon = prev ? pairDelta(prev, latest) : null;
   const baseRecon = cumulativeDelta(baseline);
+  // 品名：品名修正表優先；沒有的話用「最新」快照的 EIP 品名（以前抓最舊的，EIP 改正後匯出還是舊名）
   const allSkus = new Map();
-  snapshots.forEach(s => Object.entries(s.items).forEach(([sku,info]) => {
+  [...snapshots].reverse().forEach(s => Object.entries(s.items).forEach(([sku,info]) => {
     if (!isBoxSku(sku)) return;
     if (!allSkus.has(sku) || !allSkus.get(sku)) allSkus.set(sku, info.name);
   }));
+  allSkus.forEach((name, sku) => allSkus.set(sku, boxName(sku, name)));
 
   let rows = [['商品編號','商品名稱', ...snapshots.map(s=>snapDisp(s)+(s.isBaseline?'(A)':'')), '較上次增加','較上次減少','較基準A增加','較基準A減少']];
   Array.from(allSkus.keys()).forEach(sku => {
@@ -3793,11 +3904,13 @@ document.getElementById('export-sg-btn').addEventListener('click', async () => {
 
   const prevRecon = pairDelta(prev, latest);
 
+  // 品名：品名修正表優先；沒有的話用「最新」快照的 EIP 品名（以前抓最舊的，EIP 改正後匯出還是舊名）
   const allSkus = new Map();
-  snapshots.forEach(s => Object.entries(s.items).forEach(([sku,info]) => {
+  [...snapshots].reverse().forEach(s => Object.entries(s.items).forEach(([sku,info]) => {
     if (!isBoxSku(sku)) return;
     if (!allSkus.has(sku) || !allSkus.get(sku)) allSkus.set(sku, info.name);
   }));
+  allSkus.forEach((name, sku) => allSkus.set(sku, boxName(sku, name)));
 
   const rows = [['庫存SKU','庫存貨品名稱','數量','成本','供應商SKU','稅款']];
   let hasNegative = false;
@@ -4371,6 +4484,8 @@ async function loadAll(){
   document.body.classList.add('locked');
   await loadSnapshots();
   await loadExcessStock();
+  await loadNameFix();
+  renderNameFix();
   await loadDismissedAlerts();
   await loadIgnoredLog();
   await loadRecordedLog();
