@@ -75,6 +75,7 @@ function hctSite(cfg) {
       return route.fulfill(html(`<form method=get action="LabV2.aspx"><input id=Date_TxtV2 name=d value="${d}"><input type=hidden name=y value="${y}"><input type=submit id=confirmCondition value=查詢></form>
         <input type=radio name=yet id=YetRdo_0 ${y === '0' ? 'checked' : ''} onclick="location='LabV2.aspx?d=${encodeURIComponent(d)}&y=0'"><label for=YetRdo_0>未列印[${st.unprinted.length}]</label>
         <input type=radio name=yet id=YetRdo_1 ${y === '1' ? 'checked' : ''} onclick="location='LabV2.aspx?d=${encodeURIComponent(d)}&y=1'"><label for=YetRdo_1>已列印[${st.printed.length}]</label>
+        <input type=radio name=yet id=YetRdo_2 style="display:none" onclick="location='LabV2.aspx?d=${encodeURIComponent(d)}&y=2'">
         <table>${list.map(row).join('')}</table><input type=button value="(P)標籤列印" onclick="fetch('Report/getFromBuffer.aspx?jobid=1')">`));
     }
     if (p === 'Report/getFromBuffer.aspx') { st.labelsPrinted++; st.printed.push(...st.unprinted); st.unprinted = []; return route.fulfill({ status: 200, contentType: 'application/pdf', body: '%PDF-1.4 fake' }); }
