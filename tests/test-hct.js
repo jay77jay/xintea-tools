@@ -103,6 +103,12 @@ async function scenario(name, cfg, run) {
       for (const [id, d] of db.docs) {
         if (d.ask && !d.ask._answered) {
           d.ask._answered = true; asked.push(d.ask.kind + ':' + d.ask.msg.split('\n')[0]);
+          // 人直接在工作程式的 Chrome 輸入驗證碼登入（11/20 下午 Jay 的做法）；chromeThenWeb＝之後又在網頁回答一次
+          if (d.ask.kind === 'captcha' && (cfg.chromeLogin || cfg.chromeThenWeb)) {
+            await page.fill('#ctl00_txt_input', '9999').catch(() => {}); await page.click('#ctl00_Button1').catch(() => {});
+            if (cfg.chromeLogin) continue;
+            await new Promise((r) => setTimeout(r, 300));
+          }
           const value = d.ask.kind === 'captcha' ? '1234' : (cfg.decide || (() => '停止'))(d.ask);
           db.docs.set('ans' + Date.now(), { type: 'b2cAnswer', parent: id, askId: d.ask.id, value, by: 'tester' });
         }
@@ -174,6 +180,16 @@ async function runRetry({ mod, db, log }, pid) {
     const r = await scenario('F', { homeOrders: [ORDER], printed: [{ no: '202611150370003841', name: '別人', phone: '0958716616', track: '3856626196' }] }, async (c) =>
       runRetry(c, await parentJob(c.db, { ok: false, error: 'x' })));
     check('F 新竹沒有重複 → 直接上傳、不多問', !r.err && r.site.uploads === 1 && !r.asked.some((a) => a.startsWith('decision')), `err=${r.err && r.err.message} asked=${r.asked.join(' | ')}`);
+  }
+  // G. 人直接在 Chrome 登入、網頁沒回答 → 不用等回答，直接上傳
+  if (want('G')) {
+    const r = await scenario('G', { homeOrders: [ORDER], chromeLogin: true }, async (c) => runRetry(c, await parentJob(c.db, { ok: false, error: 'x' })));
+    check('G 在 Chrome 直接登入 → 繼續上傳', !r.err && r.site.uploads === 1, `err=${r.err && r.err.message}\n      ${r.logs.slice(-5).join('\n      ')}`);
+  }
+  // H. 11/20 下午實際情況：在 Chrome 登入，又在網頁回答 → 不能把已登入的頁面當成出錯
+  if (want('H')) {
+    const r = await scenario('H', { homeOrders: [ORDER], chromeThenWeb: true }, async (c) => runRetry(c, await parentJob(c.db, { ok: false, error: 'x' })));
+    check('H 在 Chrome 登入又在網頁回答 → 繼續上傳', !r.err && r.site.uploads === 1, `err=${r.err && r.err.message}\n      ${r.logs.slice(-5).join('\n      ')}`);
   }
   const fail = results.filter((x) => !x.ok).length;
   console.log(`\n${results.length - fail}/${results.length} 通過`);
