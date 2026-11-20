@@ -112,7 +112,7 @@ const firebaseConfig = {
   messagingSenderId: "175590672953",
   appId: "1:175590672953:web:6304ddce7b45b191529be8"
 };
-const VERSION = 'xintea-ship-2026-11-20-2';
+const VERSION = 'xintea-ship-2026-11-20-3';
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth(), db = firebase.firestore();
 const COL = 'xintea_b2b_jobs';
@@ -311,16 +311,20 @@ function renderStart(j) {
   const gbFail = (st['禮盒增加數'] && !st['禮盒增加數'].ok) || (st['SG 採購單'] && !st['SG 採購單'].ok);
   const newer = lastJobs.some((x) => x.type === 'b2cStart' && x.only === 'giftbox' && x.mmdd === j.mmdd && String(x.createdAt) > String(j.createdAt) && x.status !== 'error');
   if (j.status === 'done' && gbFail && !j.dryRun && !newer) h += `<div class="row" style="margin-top:10px"><button onclick="rerunGiftbox('${j.id}')" ${can('start1') ? '' : 'disabled'}>🔁 重跑禮盒＋採購單</button><span class="sub">沿用今天已下載的總表；今天的快照已存在就直接匯出</span></div>`;
-  // 新竹沒完成 → 補上傳按鈕（只在原本那張卡片；同一份物流表有補上傳在跑、或已經補好，就不顯示）
-  const hs = st['新竹上傳＋託運單'];
-  if (j.status === 'done' && !j.only && !j.dryRun && hs && !hs.ok) {
-    const kids = (children[j.id] || []).filter((k) => k.type === 'b2cStart' && k.only === 'hct');
+  // 新竹沒完成 → 補上傳按鈕。放在原本那張卡片，也放在「最近一次失敗的補上傳」卡片上：
+  // 列表只顯示最近 6 張，原本那張常常被後面的工作擠掉（2026-11-20 Jay：找不到補上傳按鈕）
+  const pj = j.only === 'hct' ? lastJobs.find((x) => x.id === j.parent) : (j.only ? null : j);
+  const hs = pj && ((((pj.result || {}).steps) || {})['新竹上傳＋託運單']);
+  if (pj && pj.status === 'done' && !pj.dryRun && hs && !hs.ok) {
+    const kids = (children[pj.id] || []).filter((k) => k.type === 'b2cStart' && k.only === 'hct').sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
     const kStep = (k) => (((k.result || k.partial || {}).steps) || {})['新竹上傳＋託運單'] || {};
     const busy = kids.some((k) => k.status === 'queued' || k.status === 'running'), fixed = kids.some((k) => kStep(k).ok);
     const uploaded = !!hs.uploaded || kids.some((k) => kStep(k).uploaded);
-    if (fixed) h += `<div class="sub" style="margin-top:8px">✅ 新竹已經補好（見「補上傳新竹」卡片）</div>`;
-    else if (busy) h += `<div class="sub" style="margin-top:8px">⏳ 補上傳新竹排隊／執行中，請看「補上傳新竹」卡片輸入驗證碼</div>`;
-    else h += `<div class="row" style="margin-top:10px"><button onclick="rerunHct('${j.id}',${uploaded})" ${can('start1') ? '' : 'disabled'}>🔁 ${uploaded ? '只補新竹託運單' : '補上傳新竹＋託運單'}</button><span class="sub">${uploaded ? '這份已經上傳過，不會再上傳' : '只傳這次的物流表；上傳前會先查新竹有沒有重複'}</span></div>`;
+    const show = j === pj || (kids.length && kids[kids.length - 1].id === j.id && j.status !== 'queued' && j.status !== 'running');
+    if (!show) {}
+    else if (fixed) { if (j === pj) h += `<div class="sub" style="margin-top:8px">✅ 新竹已經補好（見「補上傳新竹」卡片）</div>`; }
+    else if (busy) { if (j === pj) h += `<div class="sub" style="margin-top:8px">⏳ 補上傳新竹排隊／執行中，請看「補上傳新竹」卡片輸入驗證碼</div>`; }
+    else h += `<div class="row" style="margin-top:10px"><button onclick="rerunHct('${pj.id}',${uploaded})" ${can('start1') ? '' : 'disabled'}>🔁 ${uploaded ? '只補新竹託運單' : (j === pj ? '補上傳新竹＋託運單' : '再補一次新竹')}</button><span class="sub">${uploaded ? '這份已經上傳過，不會再上傳' : '只傳這次的物流表；上傳前會先查新竹有沒有重複'}</span></div>`;
   }
   if (j.giftboxShot) h += `<h3>禮盒增加數（長按存圖，貼到 DC）</h3><img class="shot" src="${esc(j.giftboxShot)}">`;
   const logs = j.log || [];
