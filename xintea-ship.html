@@ -112,7 +112,7 @@ const firebaseConfig = {
   messagingSenderId: "175590672953",
   appId: "1:175590672953:web:6304ddce7b45b191529be8"
 };
-const VERSION = 'xintea-ship-2026-11-20-1';
+const VERSION = 'xintea-ship-2026-11-20-2';
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth(), db = firebase.firestore();
 const COL = 'xintea_b2b_jobs';
@@ -207,6 +207,14 @@ function watch() {
   }, (e) => { $('jobs').innerHTML = `<div class="card" style="color:var(--bad)">讀取工作失敗：${esc(e.message)}</div>`; }));
 }
 
+// 補跑類按鈕在卡片下面，新工作卡片會出現在最上面 → 送出後捲到最上面並提示（2026-11-20 Jay：按了畫面沒變，以為沒送出）
+function sentNotice(msg) {
+  let n = $('sentNote');
+  if (!n) { n = document.createElement('div'); n.id = 'sentNote'; n.className = 'note'; $('jobs').before(n); }
+  n.textContent = msg; n.style.display = '';
+  $('jobs').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setTimeout(() => { n.style.display = 'none'; }, 15000);
+}
 async function addJob(data) {
   return db.collection(COL).add(Object.assign({ status: 'queued', createdAt: new Date().toISOString(), by: user.displayName || user.email, byEmail: user.email }, data));
 }
@@ -232,7 +240,7 @@ window.rerunGiftbox = async (id) => {
   const windowDays = parseInt($('windowDays').value, 10);
   if (!(windowDays >= 1 && windowDays <= 60)) return alert('抓取天數要是 1～60 的數字');
   if (!confirm(`重跑 心茶${j.mmdd}${j.label ? '（' + j.label + '）' : ''} 的禮盒增加數和 SG 採購單？\n抓未來 ${windowDays} 天（上方欄位的天數）。\n\n今天的快照如果已經上傳過，會直接用那筆匯出；天數不一樣會停下來提醒你。`)) return;
-  try { await addJob({ type: 'b2cStart', only: 'giftbox', label: j.label || '', windowDays, mmdd: j.mmdd }); } catch (e) { alert('送出失敗：' + e.message); }
+  try { await addJob({ type: 'b2cStart', only: 'giftbox', label: j.label || '', windowDays, mmdd: j.mmdd }); sentNotice('✅ 已送出「重跑禮盒＋採購單」，進度看下面最上面那張卡片'); } catch (e) { alert('送出失敗：' + e.message); }
 };
 // 補上傳新竹：只處理這一次「出貨開始」的物流表；工作程式會先查有沒有上傳過、新竹上有沒有同電話的單，避免重複
 window.rerunHct = async (id, onlyLabels) => {
@@ -243,7 +251,7 @@ window.rerunHct = async (id, onlyLabels) => {
   const what = onlyLabels ? '這份物流表已經上傳過新竹，這次只補託運單，不會再上傳。'
     : `會上傳自建宅配 ${zd.home || '?'} 單。上傳前會先查新竹「報表 → 標籤」有沒有同電話的單，有的話會停下來問你。`;
   if (!confirm(`補 心茶${j.mmdd}${j.label ? '（' + j.label + '）' : ''} 的新竹${onlyLabels ? '託運單' : '上傳＋託運單'}？\n${String(zd.file || '').split('/').pop()}\n\n${what}\n過程中要輸入新竹驗證碼。${hctDate ? '\n新竹出貨日期用 ' + hctDate : ''}`)) return;
-  try { await addJob({ type: 'b2cStart', only: 'hct', parent: id, label: j.label || '', mmdd: j.mmdd, hctDate: hctDate || null }); } catch (e) { alert('送出失敗：' + e.message); }
+  try { await addJob({ type: 'b2cStart', only: 'hct', parent: id, label: j.label || '', mmdd: j.mmdd, hctDate: hctDate || null }); sentNotice('✅ 已送出「補上傳新竹」，等一下最上面那張卡片會出現驗證碼'); } catch (e) { alert('送出失敗：' + e.message); }
 };
 window.doPrint = async (id) => {
   if (!confirm('送印這次的所有列印檔？\n\n有黑貓託運單的話，請先在 MPC5502 手送台放厚紙。')) return;
@@ -278,7 +286,7 @@ function renderAsk(j) {
   let h = `<div class="ask"><b>⏸ ${esc(a.msg.split('\n')[0])}</b>${a.msg.includes('\n') ? `<div class="note">${esc(a.msg.split('\n').slice(1).join('\n'))}</div>` : ''}<div id="askbox_${esc(a.id)}">`;
   if (locked) h += `<div class="lock">🔒 這個決定只限管理者</div>`;
   else if (a.kind === 'screen') h += `<div class="sub">📱 已跳出畫面視窗；縮小了的話按右下角「工作程式需要操作」。</div>`;
-  else if (a.kind === 'captcha') h += `<img src="${esc(a.img)}" alt="驗證碼"><div class="row"><input type="text" id="ans_${esc(a.id)}" inputmode="numeric" autocomplete="off" style="width:120px" onkeydown="if(event.key==='Enter')answer('${j.id}','${esc(a.id)}')"><button onclick="answer('${j.id}','${esc(a.id)}')">送出驗證碼</button></div>`;
+  else if (a.kind === 'captcha') h += `<img src="${esc(a.img)}" alt="驗證碼"><div class="row"><input type="text" id="ans_${esc(a.id)}" inputmode="numeric" autocomplete="off" style="width:120px" onkeydown="if(event.key==='Enter')answer('${j.id}','${esc(a.id)}')"><button onclick="answer('${j.id}','${esc(a.id)}')">送出驗證碼</button></div><div class="sub">在這裡輸入，或直接在工作程式 Chrome 的新竹分頁登入都可以（擇一就好）</div>`;
   else h += `<div class="row">${(a.options || []).map((o) => `<button class="${o === '停止' ? 'sec' : ''}" onclick="answer('${j.id}','${esc(a.id)}',${esc(JSON.stringify(o))})">${esc(o)}</button>`).join('')}</div>`;
   return h + '</div></div>';
 }

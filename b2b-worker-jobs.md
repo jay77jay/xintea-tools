@@ -441,8 +441,18 @@ b2b-worker-2026-11-18-16 重印 PO-0718（心茶配送單-20261111-1）失敗：
 
 ### 9-4 測試
 
-- `tests/test-hct.js`（用法 `node test-hct.js <放 b2c-start.js 的資料夾> <物流表 xlsx>`）：假新竹網站（Playwright 攔截 apsweb.hct.com.tw）＋假 Firestore，跑真的 b2c-start.js。6 個情境：登入頁等驗證碼時過期、補上傳、補好後再按、已上傳只差託運單、新竹已有同電話、沒有重複。舊版 b2c-start-2026-11-20-1 在情境 A 重現 11/20 的 `page.fill: Timeout`。
+- `tests/test-hct.js`（用法 `node test-hct.js <放 b2c-start.js 的資料夾> <物流表 xlsx>`）：假新竹網站（Playwright 攔截 apsweb.hct.com.tw）＋假 Firestore，跑真的 b2c-start.js。情境：登入頁等驗證碼時過期、補上傳、補好後再按、已上傳只差託運單、新竹已有同電話、沒有重複。舊版 b2c-start-2026-11-20-1 在情境 A 重現 11/20 的 `page.fill: Timeout`。
 - 假新竹的頁面結構是照程式裡的選擇器和 Jay 給的截圖做的；標籤頁「列印狀態」選項（`YetRdo_*`）切換時是否換頁、清單文字是否含電話，要在第一次實跑時看執行紀錄確認。
+
+### 9-6 直接在 Chrome 登入新竹也可以（Jay 2026-11-20 15:11 實測，b2c-start-2026-11-20-3、網頁 xintea-ship-2026-11-20-2）
+
+- 15:11 補上傳：Jay 在工作程式 Chrome 的新竹分頁直接輸入驗證碼登入，又在網頁回答。20-2 版看到登入頁欄位不見了，就當成「頁面變了」去重開，結果那個分頁被關掉（`page.fill: Target page, context or browser has been closed … #ctl00_Enterprise`）。
+- 改法：只要瀏覽器裡**任何一個新竹分頁**已經登入（有 `#m2140`）就直接用：
+  - 等回答的時候每 3 秒看一次，有人在 Chrome 登入就不等回答（`ask` 新增 `until`）。
+  - 回答送到但登入頁不見了，先等 15 秒看是不是已經登入，不是才重開。
+  - 分頁被關掉就重新找一個。
+- 網頁：驗證碼框下面加說明「在這裡輸入，或直接在 Chrome 登入，擇一就好」。按「補上傳新竹」或「重跑禮盒」後，捲到最上面並顯示「已送出…」。
+- 測試加情境 G（只在 Chrome 登入）、H（在 Chrome 登入又在網頁回答），共 8/8 通過。20-2 版在 H 重現 `page.fill` 失敗，在 G 會一直等回答。
 
 ### 9-5 上線順序
 
