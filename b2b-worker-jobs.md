@@ -487,7 +487,25 @@ b2b-worker-2026-11-18-16 重印 PO-0718（心茶配送單-20261111-1）失敗：
   - 新竹任何回應（包括新視窗）只要是 PDF，或是 base64 的 PDF（`JVBER…` 開頭），都接；看到 `jobid` 但還沒拿到 PDF，就自己取 `Report/getFromBuffer.aspx?jobid=…&BASE64=N`；新視窗直接顯示 PDF、讀不到內容時，用同一個登入狀態把同一個請求再送一次；變成下載也接。
   - 90 秒都沒拿到時，錯誤訊息列出看到的新竹 `Report/` 回應（網址、狀態、類型），下次就知道新竹實際怎麼回。
 - 測試假新竹的「(P)標籤列印」改成像實際一樣開新視窗 POST `Report/LabPDF.aspx`，回應有「直接回 PDF」和「網頁再用 getFromBuffer 拿 base64」兩種；清單加別的客戶的單。13/13 通過；23-1 版在情境 B 重現 11/23 的「90 秒內沒有產生」。
-- 還不確定新竹實際是哪一種回法；`LabV2.html`（存網頁時旁邊 `_files` 資料夾裡的那個檔）可以確認。
+- 23-2 按「(P)標籤列印」的做法後來確認行不通，見 9-10。
+
+### 9-10 照新竹頁面的做法直接取託運單（Jay 提供 LabV2.html，b2c-start-2026-11-23-3）
+
+- 「(P)標籤列印」在這個帳號是**隱藏的**（ViewState 裡 Visible=false，畫面上沒有這顆按鈕）。11/23 舊版按到的是**某一列的「標籤列印」**。23-2 版找「(P)標籤列印」會失敗：「找不到「(P)標籤列印」按鈕」。
+- 每一列的「標籤列印」呼叫新竹頁面的 `onPressToPrint(託運單號, refresh)`，做法是 `openWindowWithPost('Report/LabPDF.aspx', '_blank', …)`，送出的欄位：
+  - `Date`＝出貨日期去掉斜線，例如 `20261123`
+  - `sort`＝`edelno`
+  - `Edelno`＝託運單號
+  - `qtyRestrict`＝`1`
+  - `position`＝頁面上 `#position` 的值（預設 1）
+  - `refreshopener`＝refresh
+- 其他頁面元素：列印狀態選項是 `YetRdo_0`（未列印）、`YetRdo_1`（已列印）、`YetRdo_2`（已發送，隱藏）；日期欄是 `Date_TxtV2`，改了會自動重新送出；過濾條件有 `filterConditionString`（訂單號碼）、`receWordText`（收件人）、`EsstNo`（HCT 客戶代號）。
+- b2c-start-2026-11-23-3：
+  - 在清單裡找出這份物流表的列（電話後 9 碼或心茶單號），託運單號取自那一列 `onPressToPrint('…')` 的第一個參數；找不到就用列文字裡不是 0 開頭的 10 碼數字（電話是 09 開頭）。
+  - 每張託運單用同一個登入狀態直接 POST `Report/LabPDF.aspx`，送上面那些欄位。回應是 PDF 就用；回應是網頁就照裡面的 `jobid`，先取網頁裡的 `LabPDF_content…` 步驟，再取 `getFromBuffer.aspx?jobid=…&BASE64=N`。
+  - 多張就合成一個 PDF，依序試 pypdf、PyPDF2、PyMuPDF；都沒有就分開存成 `_1`、`_2`…
+  - 直接取失敗才改用按按鈕（23-2 的做法）當備援。
+- 測試假新竹照 LabV2.html 改：沒有 (P) 按鈕、每列一顆 `onPressToPrint` 按鈕、有 `#position`；LabPDF 有直接回 PDF、回 base64、回網頁＋jobid 三種回法。14/14 通過；23-2 版在這個頁面重現「找不到「(P)標籤列印」按鈕」。
 
 ### 9-5 上線順序
 

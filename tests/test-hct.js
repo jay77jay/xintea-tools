@@ -50,7 +50,7 @@ function hctSite(cfg) {
   const st = { loggedIn: false, loginServed: 0, uploads: 0, emptySubmits: 0, labelsPrinted: 0, unprinted: [...(cfg.unprinted || [])], printed: [...(cfg.printed || [])] };
   const html = (b) => ({ status: 200, contentType: 'text/html; charset=utf-8', body: '<!doctype html><meta charset=utf-8>' + b });
   // 照 11/23 實際畫面：每列有「標籤列印」字樣＋託運單號，收件人下面有電話；新竹帳號多個客戶共用
-  const row = (r) => `<tr><td><input type=checkbox name=sel value="${r.track}" id="cb_${r.track}"></td><td>${r.seq || 1}<br><span class=lb>標籤列印</span><br>${r.track}</td><td>${r.name}<br>(${r.phone})</td><td>${r.sender || '心茶'}</td></tr>`;
+  const row = (r) => `<tr><td><input type=checkbox name=sel value="${r.track}" id="cb_${r.track}"></td><td>${r.seq || 1}<br><input type=button value="標籤列印" onclick="onPressToPrint('${r.track}','')"><br>${r.track}</td><td>${r.name}<br>(${r.phone})</td><td>${r.sender || '心茶'}</td></tr>`;
   st.handle = async (route) => {
     const req = route.request(), u = new URL(req.url()), p = u.pathname.replace('/SCTM/', '');
     if (p === 'Login' && req.method() === 'POST') { st.loggedIn = true; return route.fulfill(html(main())); }
@@ -76,7 +76,7 @@ function hctSite(cfg) {
       const ddl = (body.match(/name="x"\r\n\r\n([^\r]*)/) || [])[1] || '';
       if (!hasFile || ddl !== (cfg.ddlValue || '心茶') || cfg.rejectUpload) { st.emptySubmits++; return route.fulfill(updForm(ddl)); }
       st.uploads++;
-      for (const o of cfg.homeOrders) st.unprinted.push(Object.assign({ track: '38566' + (26000 + st.uploads) + o.no.slice(-3) }, o));
+      cfg.homeOrders.forEach((o, i) => st.unprinted.push(Object.assign({ track: String(3856626000 + st.uploads * 10 + i) }, o)));   // 託運單號 10 碼
       return route.fulfill(html(`匯入完成，共 ${cfg.homeOrders.length} 筆<input id=batchid value="B${st.uploads}">`));
     }
     if (p === 'LabV2.aspx') {
@@ -86,12 +86,20 @@ function hctSite(cfg) {
         <input type=radio name=yet id=YetRdo_0 ${y === '0' ? 'checked' : ''} onclick="location='LabV2.aspx?d=${encodeURIComponent(d)}&y=0'"><label for=YetRdo_0>未列印[${st.unprinted.length}]</label>
         <input type=radio name=yet id=YetRdo_1 ${y === '1' ? 'checked' : ''} onclick="location='LabV2.aspx?d=${encodeURIComponent(d)}&y=1'"><label for=YetRdo_1>已列印[${st.printed.length}]</label>
         <input type=radio name=yet id=YetRdo_2 style="display:none" onclick="location='LabV2.aspx?d=${encodeURIComponent(d)}&y=2'">
-        <input type=button id=btnP value="(P)標籤列印" onclick="document.getElementById('pf').submit()">
+        <input name=position id=position value="1">
+        <script>function onPressToPrint(no, refresh){ // 照 2026-11-23 LabV2.html：開新視窗 POST 到 Report/LabPDF.aspx
+          var d=document.getElementById('Date_TxtV2').value.replace(/\//g,''); var f=document.createElement('form'); f.method='post'; f.action='Report/LabPDF.aspx'; f.target='_blank';
+          var kv={Date:d,sort:'edelno',Edelno:no,qtyRestrict:1,position:document.getElementById('position').value,refreshopener:refresh};
+          for (var k in kv){var i=document.createElement('input');i.type='hidden';i.name=k;i.value=kv[k];f.appendChild(i);} document.body.appendChild(f); f.submit(); }</script>
+        ${cfg.showP ? `<input type=button id=btnP value="(P)標籤列印" onclick="document.getElementById('pf').submit()">` : ''}
         <form id=pf method=post action="Report/LabPDF.aspx" target="_blank"><input type=hidden name=Date value="${d}"><table>${list.map(row).join('')}</table></form>`));
     }
     // (P)標籤列印 → 新視窗 POST Report/LabPDF.aspx（勾選的託運單號）。labMode 'b64'：回網頁再用 getFromBuffer?BASE64=Y 拿 base64 轉成 pdf236.pdf；'direct'：直接回 PDF
     if (p === 'Report/LabPDF.aspx') {
-      const sel = new URLSearchParams(req.postData() || '').getAll('sel');
+      const q = new URLSearchParams(req.postData() || '');
+      const sel = q.get('Edelno') ? [q.get('Edelno')] : q.getAll('sel');
+      if (q.get('Edelno') && !/^\d{8}$/.test(q.get('Date') || '')) return route.fulfill(html('日期格式錯誤'));
+      st.labCalls = (st.labCalls || 0) + 1;
       st.lastSelected = sel;
       const pick = (arr) => arr.filter((r) => sel.includes(r.track));
       const chosen = [...pick(st.unprinted), ...pick(st.printed)];
@@ -99,10 +107,13 @@ function hctSite(cfg) {
       for (const r of chosen) if (!st.printed.includes(r)) st.printed.push(r);
       st.labelsPrinted++;
       if ((cfg.labMode || 'b64') === 'direct') return route.fulfill({ status: 200, contentType: 'application/pdf', body: '%PDF-1.4 fake ' + sel.join(',') });
+      if (cfg.labMode === 'job') { st.contentCalled = false; return route.fulfill(html(`<iframe src="LabPDF_contentN2_TTP244.aspx?Date=x&amp;jobid=J236"></iframe><embed src="getFromBuffer.aspx?jobid=J236&amp;BASE64=N">`)); }
       return route.fulfill(html(`<script>fetch('getFromBuffer.aspx?jobid=236&BASE64=Y').then(r=>r.text()).then(t=>{const b=Uint8Array.from(atob(t),c=>c.charCodeAt(0));
         const u=URL.createObjectURL(new Blob([b],{type:'application/pdf'}));document.body.innerHTML='<iframe src="'+u+'#pdf236.pdf" style="width:100%;height:600px"></iframe>'})</script>`));
     }
+    if (p === 'Report/LabPDF_contentN2_TTP244.aspx') { st.contentCalled = true; return route.fulfill(html('ok')); }
     if (p === 'Report/getFromBuffer.aspx') {
+      if (cfg.labMode === 'job' && !st.contentCalled) return route.fulfill({ status: 200, contentType: 'text/plain', body: '' });
       const pdf = '%PDF-1.4 fake ' + (st.lastSelected || []).join(',');
       return route.fulfill({ status: 200, contentType: 'text/plain', body: u.searchParams.get('BASE64') === 'N' ? pdf : Buffer.from(pdf).toString('base64') });
     }
@@ -124,9 +135,10 @@ async function scenario(name, cfg, run) {
   // ctx.request（不經過瀏覽器的請求）不吃 ctx.route → 也轉給假新竹
   const viaSite = (url, method, data) => new Promise((resolve) => site.handle({
     request: () => ({ url: () => url, method: () => method || 'GET', postData: () => (data ? Buffer.from(data).toString('utf8') : null), postDataBuffer: () => (data ? Buffer.from(data) : null) }),
-    fulfill: (r) => resolve({ status: () => r.status || 200, body: async () => Buffer.from(r.body || '') }) }));
+    fulfill: (r) => resolve({ status: () => r.status || 200, headers: () => ({ 'content-type': r.contentType || '' }), body: async () => Buffer.from(r.body || '') }) }));
   ctx.request.fetch = async (url, o = {}) => viaSite(url, o.method, o.data);
   ctx.request.get = async (url) => viaSite(url, 'GET');
+  ctx.request.post = async (url, o = {}) => viaSite(url, 'POST', o.form ? new URLSearchParams(o.form).toString() : o.data);
   const page = await ctx.newPage();
   const db = fakeDb(), logs = [];
   const W = { db, COL_JOB: 'jobs', pageFor: async () => page, browser: async () => ctx };
@@ -258,6 +270,24 @@ async function runRetry({ mod, db, log }, pid) {
     const r = await scenario('M', { homeOrders: [ORDER], printed: [mine, OTHER], labMode: 'direct' }, async (c) =>
       runRetry(c, await parentJob(c.db, { ok: false, error: '新竹標籤 PDF 90 秒內沒有產生', uploaded: { at: '2026-11-23T03:05:32Z', orders: [ORDER.no] } })));
     check('M 已列印過 → 從已列印重印、不再上傳', !r.err && r.site.uploads === 0 && (r.site.lastSelected || []).join() === mine.track, `err=${r.err && r.err.message} selected=${r.site.lastSelected}`);
+  }
+  // N. 兩張宅配、新竹回網頁＋jobid（舊手動流程說的 LabPDF → contentN2 → getFromBuffer）→ 兩張都拿到、合成一個 PDF
+  if (want('N')) {
+    const O2 = { no: '202611230000000002', name: '第二位', phone: '0922333444' };
+    const r = await scenario('N', { homeOrders: [ORDER, O2], labMode: 'job' }, async (c) => {
+      const pid = await parentJob(c.db, { ok: false, error: 'x' });
+      // 物流表多一張宅配（複製第 2 列、改單號／姓名／電話）
+      const rel = '心茶1120/物流表B2C_N-2.xlsx';
+      require('child_process').execFileSync('python3', ['-I', '-c', `import openpyxl,sys
+wb=openpyxl.load_workbook(sys.argv[1]); ws=wb.worksheets[0]
+h=[c.value for c in ws[1]]; row=[c.value for c in ws[2]]
+row[h.index('單號')]=sys.argv[3]; row[h.index('收件人')]=sys.argv[4]; row[h.index('收件人電話')]=sys.argv[5]
+ws.append(row); wb.save(sys.argv[2])`, path.join(DL, LOGI_REL), path.join(DL, rel), O2.no, O2.name, O2.phone.slice(1)]);
+      const d = c.db.docs.get(pid); d.result.steps['整單'].home = 2; d.result.steps['整單'].file = rel; c.db.docs.set(pid, d);
+      return runRetry(c, pid);
+    });
+    const pdf = path.join(DL, '心茶1120', '心茶1120新竹託運單.pdf');
+    check('N 兩張＋jobid 流程 → 合成一個 PDF', !r.err && r.site.uploads === 1 && r.site.labCalls === 2 && fs.existsSync(pdf), `err=${r.err && r.err.message}\n      ${r.logs.slice(-3).join('\n      ')}`);
   }
   const fail = results.filter((x) => !x.ok).length;
   console.log(`\n${results.length - fail}/${results.length} 通過`);
