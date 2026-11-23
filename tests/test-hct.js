@@ -47,7 +47,7 @@ function fakeDb() {
 const H = 'https://apsweb.hct.com.tw/SCTM/';
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 function hctSite(cfg) {
-  const st = { loggedIn: false, loginServed: 0, uploads: 0, labelsPrinted: 0, unprinted: [...(cfg.unprinted || [])], printed: [...(cfg.printed || [])] };
+  const st = { loggedIn: false, loginServed: 0, uploads: 0, emptySubmits: 0, labelsPrinted: 0, unprinted: [...(cfg.unprinted || [])], printed: [...(cfg.printed || [])] };
   const html = (b) => ({ status: 200, contentType: 'text/html; charset=utf-8', body: '<!doctype html><meta charset=utf-8>' + b });
   const row = (r) => `<tr><td><input type=checkbox id="cb_${r.no}"></td><td>${r.track}</td><td>${r.name}<br>(${r.phone})</td></tr>`;
   st.handle = async (route) => {
@@ -61,13 +61,22 @@ function hctSite(cfg) {
         <img id=imgCode style="width:60px;height:20px" src="data:image/png;base64,${PNG}"><input id=ctl00_txt_input><input type=submit id=ctl00_Button1 value=登入></form>
         ${expire ? '<script>setTimeout(()=>{document.body.innerHTML="<h1>逾時，請重新登入</h1>"},2000)</script>' : ''}`));
     }
-    if (p === 'Updata.aspx' && req.method() === 'GET') return route.fulfill(html(`<form method=post enctype="multipart/form-data" action="Updata.aspx">
-        <input id=Date_Txt name=d><select id=ExeclDdl name=x><option value="">請選</option><option value="心茶">心茶上傳</option></select>
-        <input type=file id=FileUpload1 name=f><input type=submit id=SendBtn value=上傳></form>`));
+    // 上傳頁（照 11/23 實測）：改「檔案格式」會自動重新送出整頁（ASP.NET postback），剛放的檔案會被清掉；沒有檔案按上傳只會回到表單、沒有任何訊息
+    const updForm = (ddl, date) => html(`<form method=post enctype="multipart/form-data" action="Updata.aspx">
+        步驟1.決定出貨日期<input id=Date_Txt name=d value="${date || ''}"> - 批匯號:<input id=batchid value="">
+        步驟4.檔案格式<select id=ExeclDdl name=x onchange="setTimeout(()=>{location='Updata.aspx?ddl='+encodeURIComponent(this.value)},${cfg.postbackMs ?? 50})">
+          <option value="">請選擇</option><option value="G1" ${ddl === 'G1' ? 'selected' : ''}>一般格式</option>
+          <option value="${cfg.ddlValue || '心茶'}" ${ddl === (cfg.ddlValue || '心茶') ? 'selected' : ''}>心茶上傳</option></select>
+        步驟6.決定匯入檔案<input type=file id=FileUpload1 name=f> 步驟7.<input type=submit id=SendBtn value=上傳></form>`);
+    if (p === 'Updata.aspx' && req.method() === 'GET') return route.fulfill(updForm(u.searchParams.get('ddl') ?? (cfg.ddlDefault || '')));
     if (p === 'Updata.aspx') {
+      const body = (req.postDataBuffer() || Buffer.alloc(0)).toString('utf8');   // 欄位值有中文（心茶），要用 utf8 讀
+      const hasFile = /filename="[^"]+"/.test(body);
+      const ddl = (body.match(/name="x"\r\n\r\n([^\r]*)/) || [])[1] || '';
+      if (!hasFile || ddl !== (cfg.ddlValue || '心茶') || cfg.rejectUpload) { st.emptySubmits++; return route.fulfill(updForm(ddl)); }
       st.uploads++;
       for (const o of cfg.homeOrders) st.unprinted.push(Object.assign({ track: '38566' + (26000 + st.uploads) + o.no.slice(-3) }, o));
-      return route.fulfill(html(`上傳完成，共 ${cfg.homeOrders.length} 筆<input id=batchid value="B${st.uploads}">`));
+      return route.fulfill(html(`匯入完成，共 ${cfg.homeOrders.length} 筆<input id=batchid value="B${st.uploads}">`));
     }
     if (p === 'LabV2.aspx') {
       const d = u.searchParams.get('d') || '2026/11/19', y = u.searchParams.get('y') || '0';
@@ -75,6 +84,7 @@ function hctSite(cfg) {
       return route.fulfill(html(`<form method=get action="LabV2.aspx"><input id=Date_TxtV2 name=d value="${d}"><input type=hidden name=y value="${y}"><input type=submit id=confirmCondition value=查詢></form>
         <input type=radio name=yet id=YetRdo_0 ${y === '0' ? 'checked' : ''} onclick="location='LabV2.aspx?d=${encodeURIComponent(d)}&y=0'"><label for=YetRdo_0>未列印[${st.unprinted.length}]</label>
         <input type=radio name=yet id=YetRdo_1 ${y === '1' ? 'checked' : ''} onclick="location='LabV2.aspx?d=${encodeURIComponent(d)}&y=1'"><label for=YetRdo_1>已列印[${st.printed.length}]</label>
+        <input type=radio name=yet id=YetRdo_2 style="display:none" onclick="location='LabV2.aspx?d=${encodeURIComponent(d)}&y=2'">
         <table>${list.map(row).join('')}</table><input type=button value="(P)標籤列印" onclick="fetch('Report/getFromBuffer.aspx?jobid=1')">`));
     }
     if (p === 'Report/getFromBuffer.aspx') { st.labelsPrinted++; st.printed.push(...st.unprinted); st.unprinted = []; return route.fulfill({ status: 200, contentType: 'application/pdf', body: '%PDF-1.4 fake' }); }
@@ -190,6 +200,25 @@ async function runRetry({ mod, db, log }, pid) {
   if (want('H')) {
     const r = await scenario('H', { homeOrders: [ORDER], chromeThenWeb: true }, async (c) => runRetry(c, await parentJob(c.db, { ok: false, error: 'x' })));
     check('H 在 Chrome 登入又在網頁回答 → 繼續上傳', !r.err && r.site.uploads === 1, `err=${r.err && r.err.message}\n      ${r.logs.slice(-5).join('\n      ')}`);
+  }
+  // I. 紀錄說上傳過，但新竹清單沒有（11/23 舊版沒真的匯入卻記成已上傳）→ 問人；選「重新上傳」→ 上傳 1 次
+  if (want('I')) {
+    const r = await scenario('I', { homeOrders: [ORDER], decide: (q) => (/找不到/.test(q.msg) ? '新竹確實沒有，重新上傳' : '停止') }, async (c) =>
+      runRetry(c, await parentJob(c.db, { ok: false, error: '新竹未列印 0 筆，跟今天的宅配 1 筆對不上', uploaded: { at: '2026-11-23T02:21:13Z', orders: [ORDER.no] } })));
+    check('I 紀錄說上傳過但新竹沒有 → 問人後重新上傳', !r.err && r.site.uploads === 1 && r.site.labelsPrinted === 1 && r.asked.some((a) => /找不到/.test(a)),
+      `err=${r.err && r.err.message} uploads=${r.site.uploads} asked=${r.asked.join(' | ')}`);
+  }
+  // J. 格式已經預設「心茶上傳」（不會重新載入）、選項值是數字 → 照樣上傳成功
+  if (want('J')) {
+    const r = await scenario('J', { homeOrders: [ORDER], ddlValue: '25', ddlDefault: '25' }, async (c) => runRetry(c, await parentJob(c.db, { ok: false, error: 'x' })));
+    check('J 格式預設已選好、選項值是數字 → 上傳成功', !r.err && r.site.uploads === 1, `err=${r.err && r.err.message}\n      ${r.logs.slice(-4).join('\n      ')}`);
+  }
+  // K. 新竹沒有真的匯入（例如格式不對被退回表單）→ 上傳後確認抓到，不記成已上傳
+  if (want('K')) {
+    const r = await scenario('K', { homeOrders: [ORDER], rejectUpload: true }, async (c) => runRetry(c, await parentJob(c.db, { ok: false, error: 'x' })));
+    const kid = [...r.db.docs.values()].find((d) => d.only === 'hct');
+    const st = (((kid || {}).partial || {}).steps || {})['新竹上傳＋託運單'] || {};
+    check('K 新竹沒匯入 → 報錯、不記成已上傳', !!r.err && /上傳沒成功/.test(r.err.message) && !st.uploaded, `err=${r.err && r.err.message} uploaded=${JSON.stringify(st.uploaded)}`);
   }
   const fail = results.filter((x) => !x.ok).length;
   console.log(`\n${results.length - fail}/${results.length} 通過`);

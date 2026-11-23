@@ -112,7 +112,7 @@ const firebaseConfig = {
   messagingSenderId: "175590672953",
   appId: "1:175590672953:web:6304ddce7b45b191529be8"
 };
-const VERSION = 'xintea-ship-2026-11-20-3';
+const VERSION = 'xintea-ship-2026-11-23-1';
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth(), db = firebase.firestore();
 const COL = 'xintea_b2b_jobs';
@@ -248,7 +248,7 @@ window.rerunHct = async (id, onlyLabels) => {
   const zd = (((j.result || {}).steps) || {})['整單'] || {};
   const hctDate = $('hctDate').value.trim();
   if (hctDate && !/^\d{4}\/\d{2}\/\d{2}$/.test(hctDate)) return alert('新竹日期格式：2026/11/22');
-  const what = onlyLabels ? '這份物流表已經上傳過新竹，這次只補託運單，不會再上傳。'
+  const what = onlyLabels ? '紀錄說這份物流表已經上傳過新竹。工作程式會先核對新竹清單：有就只補託運單；找不到會停下來問你要不要重新上傳。'
     : `會上傳自建宅配 ${zd.home || '?'} 單。上傳前會先查新竹「報表 → 標籤」有沒有同電話的單，有的話會停下來問你。`;
   if (!confirm(`補 心茶${j.mmdd}${j.label ? '（' + j.label + '）' : ''} 的新竹${onlyLabels ? '託運單' : '上傳＋託運單'}？\n${String(zd.file || '').split('/').pop()}\n\n${what}\n過程中要輸入新竹驗證碼。${hctDate ? '\n新竹出貨日期用 ' + hctDate : ''}`)) return;
   try { await addJob({ type: 'b2cStart', only: 'hct', parent: id, label: j.label || '', mmdd: j.mmdd, hctDate: hctDate || null }); sentNotice('✅ 已送出「補上傳新竹」，等一下最上面那張卡片會出現驗證碼'); } catch (e) { alert('送出失敗：' + e.message); }
@@ -324,7 +324,7 @@ function renderStart(j) {
     if (!show) {}
     else if (fixed) { if (j === pj) h += `<div class="sub" style="margin-top:8px">✅ 新竹已經補好（見「補上傳新竹」卡片）</div>`; }
     else if (busy) { if (j === pj) h += `<div class="sub" style="margin-top:8px">⏳ 補上傳新竹排隊／執行中，請看「補上傳新竹」卡片輸入驗證碼</div>`; }
-    else h += `<div class="row" style="margin-top:10px"><button onclick="rerunHct('${pj.id}',${uploaded})" ${can('start1') ? '' : 'disabled'}>🔁 ${uploaded ? '只補新竹託運單' : (j === pj ? '補上傳新竹＋託運單' : '再補一次新竹')}</button><span class="sub">${uploaded ? '這份已經上傳過，不會再上傳' : '只傳這次的物流表；上傳前會先查新竹有沒有重複'}</span></div>`;
+    else h += `<div class="row" style="margin-top:10px"><button onclick="rerunHct('${pj.id}',${uploaded})" ${can('start1') ? '' : 'disabled'}>🔁 ${uploaded ? '只補新竹託運單' : (j === pj ? '補上傳新竹＋託運單' : '再補一次新竹')}</button><span class="sub">${uploaded ? '紀錄說已上傳；會先核對新竹，找不到會問你' : '只傳這次的物流表；上傳前會先查新竹有沒有重複'}</span></div>`;
   }
   if (j.giftboxShot) h += `<h3>禮盒增加數（長按存圖，貼到 DC）</h3><img class="shot" src="${esc(j.giftboxShot)}">`;
   const logs = j.log || [];
