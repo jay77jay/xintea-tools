@@ -859,6 +859,12 @@
 <script>
 // ============================================================
 // 版本紀錄（每次有邏輯或功能異動，記得在這裡加一行＋更新 APP_VERSION）
+// v1.22.0（2026-11-23）：★重拋單不再重複請購。11/23 #20261108143031221：心茶把 -1 標「訂單刪除」、重開 -2「新增」（A020011×150，
+//                        內容沒變），帳本只認 key，-2 被當成全新訂單整筆請購、-1 又算成減少進紅框 → 多請購 150。
+//                        現在算過的 key 被刪除時留「墓碑」（單號去掉尾巴英文字母＋料號），之後同單號同料號的新 key 先拿墓碑抵，
+//                        抵掉的不算增加、當初的減少也拿掉；數量變多只請購差額、變少只把差額算減少。拆單（…644→644A/644B）一樣適用。
+//                        刪除跟新增分在不同份總表（上午只看到刪除、下午才看到新增）也會抵。不同訂單之間、換料號都不抵。
+//                        比對結果上方會列出「重拋單已自動抵掉」。測試：tests/test-giftbox-ledger.js（14 種情況，含天數 14→3→14→3）
 // v1.21.0（2026-11-19）：新增「品名修正表」（卡片7）：廠商說 EIP 品名有錯、另給修正 Excel（料號／EIP品名），上傳後
 //                        對照表、CSV、匯出 SG採購單、健康檢查補登、採購單彙整列印都優先用修正後品名；存雲端，大家共用。
 //                        另修正品名抓「最舊快照」的問題，改抓最新快照（EIP 改正後才會跟著更新）
@@ -1014,8 +1020,8 @@
 //                        忽略原因下拉選單、紅框警示掃描全部歷史快照
 // v1.0.0：初始版本（新增/異動/刪除/結案判斷、均茂排除、SG採購單匯出、全品項健康檢查）
 // ============================================================
-const APP_VERSION = 'v1.21.0';
-const APP_VERSION_DATE = '2026-11-19';
+const APP_VERSION = 'v1.22.0';
+const APP_VERSION_DATE = '2026-11-23';
 console.log(`心茶 出貨 禮盒製作每日增加數 ${APP_VERSION}（${APP_VERSION_DATE}）`);
 
 const STORAGE_KEY = 'xincha-giftbox-snapshots';
@@ -1299,7 +1305,44 @@ function ledgerInit(snap, nextSnap){
     const c = ledger.get(r.key);
     if (c) c.qty += r.qty; else ledger.set(r.key, { sku: r.sku, name: r.name, qty: r.qty });
   });
+  ledger.tomb = new Map();
   return ledger;
+}
+
+// ---------- 重拋單（v1.22.0）----------
+// 心茶改訂單時常常不改原本那列，而是把舊的 key 標成「訂單刪除」、用新的 key 重開一列（同一個電商單號）：
+//   #20261108143031221-1 訂單刪除、#20261108143031221-2 新增（2026-11-23，A020011×150）
+// 或拆成 …644A／…644B（2026-09 AA00247）。帳本只認 key，舊版會把新的那列當成全新訂單整筆請購，
+// 舊的那列又算成減少進紅框 → 同一張單請購兩次。
+// 做法：算過的 key 被刪除時，在帳本留一筆「墓碑」（電商單號去掉尾巴英文字母＋料號 → 數量、當時那一組比對）。
+// 之後（同一份總表或之後任何一份）同單號同料號出現沒算過的新 key，就先拿墓碑抵：
+//   抵掉的部分不算增加，也把當初記的減少拿掉（紅框不會出現）；新的比舊的多才算增加、少的才算減少。
+// 不同訂單之間絕不互抵；換料號也不抵（舊料號照樣算減少、新料號照樣請購）。
+const orderBase = r => baseOrderNo(r.orderNo || String(r.key || '').replace(/^#/, '').replace(/-\d+$/, ''));
+const tombKey = r => orderBase(r) + '|' + r.sku;
+function tombAdd(ledger, r, c, p, decLine){
+  const k = tombKey({ orderNo: r.orderNo, key: r.key, sku: c.sku });
+  if (!ledger.tomb.has(k)) ledger.tomb.set(k, []);
+  ledger.tomb.get(k).push({ qty: c.qty, key: r.key, pair: p, decLine });
+}
+// 用墓碑抵新的那列：回傳抵掉的數量，並把當初那一組的減少扣回來
+function tombUse(ledger, r, p){
+  const list = ledger.tomb.get(tombKey(r));
+  if (!list) return 0;
+  let need = r.qty, used = 0;
+  for (const t of list){
+    if (!need) break;
+    const take = Math.min(t.qty, need);
+    if (!take) continue;
+    t.qty -= take; need -= take; used += take;
+    const q = (t.pair.dec[r.sku] || 0) - take;   // 當初記在那一組的減少扣回來
+    if (q > 0) t.pair.dec[r.sku] = q; else delete t.pair.dec[r.sku];
+    t.decLine.qty -= take;
+    if (t.decLine.qty <= 0) t.pair.decLines.splice(t.pair.decLines.indexOf(t.decLine), 1);
+    (p.moved || (p.moved = [])).push({ sku: r.sku, name: r.name, qty: take, fromKey: t.key, toKey: r.key, orderNo: r.orderNo });
+  }
+  ledger.tomb.set(tombKey(r), list.filter(t => t.qty > 0));
+  return used;
 }
 
 // 用帳本比對一組（上一筆 → 這一筆），會直接更新帳本
@@ -1314,13 +1357,16 @@ function ledgerStep(ledger, prevSnap, latestSnap){
     if (ex && ex.sku === r.sku && ex.status === r.status) ex.qty += r.qty;
     else latestByKey.set(r.key, Object.assign({}, r));
   });
-  latestByKey.forEach((r, key) => {
+  // 先處理刪除／結案，再處理新增／異動：同一份總表裡舊 key 刪除、新 key 新增時，墓碑要先立好
+  const order = [...latestByKey].sort((a, b) => (ACTIVE_STATUS(a[1].status) ? 1 : 0) - (ACTIVE_STATUS(b[1].status) ? 1 : 0));
+  order.forEach(([key, r]) => {
     const c = ledger.get(key);
     const line = { key, orderNo: r.orderNo, permitDate: r.permitDate, status: r.status };
     if (ACTIVE_STATUS(r.status)){
       if (r.permitDate > shipTo) return; // 範圍外：看的是這筆訂單自己的製作許可日。不增、不減、帳本不動，等進到範圍內再算
       if (!c){
-        pairAdd(p, 'inc', r.sku, r.name, r.qty, line); // 從來沒算過（全新訂單，或之前一直在範圍外）
+        const moved = tombUse(ledger, r, p);              // 重拋單：先拿同單號同料號被刪掉的舊 key 抵
+        pairAdd(p, 'inc', r.sku, r.name, r.qty - moved, line); // 剩下的才是真的增加（全新訂單，或之前一直在範圍外）
         ledger.set(key, { sku: r.sku, name: r.name, qty: r.qty });
       } else if (c.sku !== r.sku){
         pairAdd(p, 'dec', c.sku, c.name, c.qty, line); // 同一個 key 換了料號：舊料號整筆減少、新料號整筆增加，各自分開記
@@ -1337,6 +1383,7 @@ function ledgerStep(ledger, prevSnap, latestSnap){
       if (c){
         pairAdd(p, 'dec', c.sku, c.name, c.qty, line); // 算過的訂單被刪除／取消
         ledger.delete(key);
+        tombAdd(ledger, r, c, p, p.decLines[p.decLines.length - 1]); // 之後同單號重開的話拿來抵
       }
       // 沒算過的（一直在範圍外就被刪了）：從來沒做、也沒請購，不是減少
     } else if (r.status === '結案'){
@@ -3596,6 +3643,11 @@ function render(){
     const windowNote = prev.windowDays !== latest.windowDays
       ? `<div class="hero-sub">上次抓「未來${prev.windowDays}天」、這次抓「未來${latest.windowDays}天」，天數不同：只有這次範圍內（製作許可日 ≤ ${latest.shipTo}）、之前沒算過的訂單才算增加；超出範圍的訂單不算減少，等它進到範圍內時才會算成增加</div>`
       : '';
+    // 重拋單：同單號舊 key 刪除、新 key 重開，數量互抵掉的部分（v1.22.0）
+    const moved = (prevRecon.moved || []).filter(m => isBoxSku(m.sku));
+    const movedNote = moved.length
+      ? `<div class="hero-sub">重拋單已自動抵掉（舊的那列刪除、同單號重開新的一列，不重複請購、也不進紅框）：${moved.map(m => `${escapeHtml(m.orderNo || '')} ${escapeHtml(m.sku)}×${m.qty}（${escapeHtml(m.fromKey || '')} → ${escapeHtml(m.toKey || '')}）`).join('；')}</div>`
+      : '';
     const decNote = totalDecVsPrev > 0
       ? `<div class="hero-sub">這一組另外有 ${totalDecVsPrev} 個是「減少」（訂單數量變少或被刪除），沒有從上面的增加數扣掉，請看上方紅框決定要記錄還是忽略</div>`
       : '';
@@ -3678,6 +3730,7 @@ function render(){
       <div class="hero-number ${cls}">${sign}${totalVsPrev}</div>
       <div class="hero-sub">這個數字是今天所有「增加」的加總（＝採購單數量，扣剩餘庫存前），用來知道今天要多做幾個；不是視窗內的全部數量</div>
       ${windowNote}
+      ${movedNote}
       ${decNote}
       ${projectionNote ? '<div class="hero-warn">部分比對對象是舊版資料（沒有明細可逐筆比對），此數字可能包含些微誤差</div>' : ''}
       ${excessStockNoteBlock()}
