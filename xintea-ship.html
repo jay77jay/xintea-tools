@@ -112,7 +112,7 @@ const firebaseConfig = {
   messagingSenderId: "175590672953",
   appId: "1:175590672953:web:6304ddce7b45b191529be8"
 };
-const VERSION = 'xintea-ship-2026-11-23-1';
+const VERSION = 'xintea-ship-2026-11-23-2';
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth(), db = firebase.firestore();
 const COL = 'xintea_b2b_jobs';
@@ -302,7 +302,13 @@ function renderStart(j) {
   add('BPM 總表', (v) => `${v.rows} 列`);
   add('禮盒增加數', (v) => (v.windowDays ? `（未來 ${v.windowDays} 天）` : '') + (v.dryRun ? '試跑' : (v.items && v.items.length ? `要做 ${v.items.length} 種：${esc(v.items.map((i) => i.sku + '×' + i.qty).join('、'))}` : '沒有要新增製作的禮盒')) + (v.notes && v.notes.length ? `<div class="note">${esc(v.notes.join('\n'))}</div>` : ''));
   add('SG 採購單', (v) => `<b>${esc(v.po)}</b> ${v.existed ? '（沿用已建立的）' : ''}${v.printed ? '　🖨 已送印' : '　送印失敗：' + esc(v.printError)}`);
-  add('BPM 物流表', (v) => v.rows ? `${v.rows} 列、${v.orders} 單` : '今天沒有要出的單');
+  add('BPM 物流表', (v) => v.rows ? `${v.rows} 列、${v.orders} 單${v.deleted ? `（${v.deleted} 列是刪除狀態，只確認、不整單）` : ''}` : '今天沒有要出的單');
+  // 規格第 11 節：重拋單（同單號舊的列「訂單刪除」、重開新的一列）
+  const RT = { new: () => '之前沒下載過，新的照常整單', a: () => '內容沒變，只確認、不整單', dry: (o) => '試跑：內容有改（' + (o.diff || []).join('；') + '），正式跑會停下來問',
+    b1: (o) => '內容有改（' + (o.diff || []).join('；') + '），' + (o.by || '') + ' 確認舊版已移除，新的照常整單',
+    b2: (o) => '內容有改（' + (o.diff || []).join('；') + '），' + (o.by || '') + ' 已在 SG 刪除舊單，新單號 ' + o.sgOrderNo,
+    skip: (o) => '內容有改（' + (o.diff || []).join('；') + '），' + (o.by || '') + ' 決定這次先不整單' };
+  add('重拋單', (v) => (v.orders || []).map((o) => esc(o.order + '：' + (RT[o.case] ? RT[o.case](o) : o.case))).join('<br>'));
   add('批次確認', (v) => v.dryRun ? `試跑${v.problems && v.problems.length ? '（條件不符：' + esc(v.problems.join('；')) + '）' : '（條件符合）'}` : v.skipped ? `沒有確認（${esc(v.by)} 決定）` : `已確認 ${v.confirmed} 列${v.problems && v.problems.length ? '（放行：' + esc(v.problems.join('；')) + '）' : ''}`);
   add('整單', (v) => v.dryRun ? '試跑' : `${v.orders} 單（單號從 ${v.start} 起）、自建宅配 ${v.home} 單`);
   add('新竹上傳＋託運單', (v) => v.dryRun ? '試跑（已登入）' : `${v.home} 張 → ${esc(String(v.pdf || '').split('/').pop())}`);

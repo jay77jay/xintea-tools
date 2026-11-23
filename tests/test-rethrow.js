@@ -1,0 +1,103 @@
+// 重拋單（規格第 11 節）的測試：假 Firestore＋真的 xlsx，跑 b2c-start.js 的 handleRethrows
+// 用法：node test-rethrow.js <放 b2c-start.js 的資料夾>
+// 物流表欄位名稱是照程式裡用到的（單號、收件人、收件人電話、物流方式）加上猜的（料號、數量、收件人地址），
+// 比對用正規式找欄位，真的物流表第一次實跑時看執行紀錄「比了 …」確認。
+'use strict';
+const fs = require('fs'), path = require('path'), os = require('os'), { execFileSync } = require('child_process');
+const SRC_DIR = path.resolve(process.argv[2]);
+const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'rethrow-'));
+process.chdir(TMP);
+fs.mkdirSync('bin'); fs.writeFileSync('bin/py', '#!/bin/sh\n[ "$1" = "-3" ] && shift\nexec python3 "$@"\n', { mode: 0o755 });
+process.env.PATH = path.join(TMP, 'bin') + ':' + process.env.PATH;
+const DL = path.join(TMP, 'DL');
+
+let src = fs.readFileSync(path.join(SRC_DIR, 'b2c-start.js'), 'utf8');
+src = src.replace(/const DL = '.*?';/, `const DL = ${JSON.stringify(DL)};`).replace(/const SCRIPT_DIR = '.*?';/, `const SCRIPT_DIR = ${JSON.stringify(TMP)};`);
+fs.writeFileSync(path.join(TMP, 'b2c-start.under-test.js'), src);
+
+const H = ['單號', '收件人', '收件人電話', '收件人地址', '物流方式', '料號', '數量'];
+const R = (no, qty, sku, addr) => [no, '林小姐', '958710211', addr || '新竹市北區湳雅街216號4樓', '黑貓宅配 (常溫)', sku || 'A020011', qty];
+function xlsx(rel, rows) {
+  const f = path.join(DL, rel); fs.mkdirSync(path.dirname(f), { recursive: true });
+  execFileSync('python3', ['-c', `import openpyxl,json,sys
+wb=openpyxl.Workbook(); ws=wb.active
+for r in json.loads(sys.argv[2]): ws.append(r)
+wb.save(sys.argv[1])`, f, JSON.stringify([H, ...rows])]);
+  return f;
+}
+const readNos = (f) => JSON.parse(execFileSync('python3', ['-c', `import openpyxl,json,sys
+ws=openpyxl.load_workbook(sys.argv[1]).worksheets[0]
+print(json.dumps([str(r[0]) for r in ws.iter_rows(min_row=2,values_only=True) if r[0]]))`, f]).toString());
+
+// 假 Firestore：只有 where().get()
+let JOBS = [];
+const db = { collection: () => { const q = (fl) => ({ where: (f, o, v) => q(fl.concat([[f, v]])),
+  get: async () => ({ docs: JOBS.filter((j) => fl.every(([f, v]) => j[f] === v)).map((j) => ({ id: j.id, data: () => j })) }) }); return q([]); } };
+const S = require(path.join(TMP, 'b2c-start.under-test.js'))({ db, COL_JOB: 'jobs' });
+const T = S._test;
+const results = [];
+const check = (name, ok, info) => { results.push(!!ok); console.log(`${ok ? '✅' : '❌'} ${name}${info ? '（' + info + '）' : ''}`); };
+const ref = { id: 'cur', update: async () => {} };
+const log = async () => {};
+const ago = (h) => new Date(Date.now() - h * 3600e3).toISOString();
+const prevJob = (id, mmdd, file) => ({ id, type: 'b2cStart', status: 'done', mmdd, createdAt: ago(5), result: { mmdd, steps: { '整單': { file } } } });
+const BASE = '20261108143031221';
+const ROWS = [{ key: `#${BASE}-1`, st: '訂單刪除' }, { key: `#${BASE}-2`, st: '新增' }, { key: '#20261120000000001-1', st: '新增' }];
+let n = 0;
+async function run(name, { prevRows, ship, answer, dryRun, cur }) {
+  n++;
+  JOBS = [];
+  if (prevRows) { xlsx(`心茶112${n}/物流表B2C_prev${n}-3.xlsx`, prevRows); JOBS.push(prevJob('p' + n, '112' + n, `心茶112${n}/物流表B2C_prev${n}-3.xlsx`)); }
+  if (ship) JOBS.push({ id: 's' + n, type: 'b2cShip', status: 'done', mmdd: '112' + n });
+  const full = xlsx(`心茶1130/物流表B2C_cur${n}.xlsx`, cur || [R(BASE, 150), R('20261120000000001', 2, 'AA00376')]);
+  const logi = { full, fileRows: (cur || [1, 2]).length, rethrows: T.findRethrows(ROWS) };
+  let asked = null;
+  const askFn = async (r, l, q) => { asked = q; const v = typeof answer === 'number' ? q.options[answer] : answer; return { value: v, by: '測試' }; };
+  try { const out = await T.handleRethrows(ref, log, logi, { dryRun: !!dryRun, stamp: 'T' + n }, askFn); return { out, asked, logi, nos: readNos(full), full }; }
+  catch (e) { return { err: e.message, asked, nos: readNos(full) }; }
+}
+
+(async () => {
+  const rt = T.findRethrows(ROWS);
+  check('認出重拋單（-1 訂單刪除＋-2 新增）', rt.length === 1 && rt[0].base === BASE, JSON.stringify(rt));
+  check('只有刪除、沒有新的那列不算重拋', T.findRethrows([{ key: '#9-1', st: '訂單刪除' }]).length === 0);
+
+  let r = await run('new', {});
+  check('之前沒下載過：照常整單，檔案不動', r.out && r.out.orders[0].case === 'new' && r.nos.length === 2, JSON.stringify(r.nos));
+
+  r = await run('a', { prevRows: [R(BASE, 150)] });
+  check('內容沒變（11/23 這張）：只確認，從這次物流表拿掉', r.out && r.out.orders[0].case === 'a' && !r.nos.includes(BASE) && r.nos.length === 1 && !r.asked, JSON.stringify(r.nos));
+  check('改之前有備份', fs.existsSync(path.join(path.dirname(r.full), '_重拋前備份')));
+  check('批次確認要對的列數跟著減 1', r.logi.fileRows === 1, `fileRows=${r.logi && r.logi.fileRows}`);
+
+  r = await run('a-only', { prevRows: [R(BASE, 150)], cur: [R(BASE, 150)] });
+  check('拿掉以後沒有單：標成不用整單', r.logi && r.logi.empty === true);
+
+  r = await run('b1', { prevRows: [R(BASE, 150)], cur: [R(BASE, 120), R('20261120000000001', 2, 'AA00376')], answer: 0 });
+  check('數量 150→120、SG 還沒上傳：停下來問', r.asked && /數量：150 → 120/.test(r.asked.msg) && /無庫存/.test(r.asked.msg), r.asked && r.asked.msg.split('\n').slice(0, 2).join(' / '));
+  check('選「舊版已移除」：新的照常整單、檔案不動', r.out && r.out.orders[0].case === 'b1' && r.nos.includes(BASE));
+
+  r = await run('b2', { prevRows: [R(BASE, 150)], ship: true, cur: [R(BASE, 150, 'A020012'), R('20261120000000001', 2, 'AA00376')], answer: 0 });
+  check('換料號、第 2 段已跑過：問的選項要先到 SG 刪除', r.asked && /SG 刪除舊單/.test(r.asked.options[0]));
+  check('新單號改成 -1', r.out && r.out.orders[0].sgOrderNo === BASE + '-1' && r.nos.includes(BASE + '-1'), JSON.stringify(r.nos));
+
+  r = await run('b2-again', { prevRows: [R(BASE + '-1', 150)], ship: true, cur: [R(BASE, 100), R('20261120000000001', 2, 'AA00376')], answer: 0 });
+  check('SG 已經有 -1：改成 -2', r.out && r.out.orders[0].sgOrderNo === BASE + '-2' && r.nos.includes(BASE + '-2'), JSON.stringify(r.nos));
+
+  r = await run('skip', { prevRows: [R(BASE, 150)], cur: [R(BASE, 120), R('20261120000000001', 2, 'AA00376')], answer: 1 });
+  check('選「這次先不整單」：從物流表拿掉', r.out && r.out.orders[0].case === 'skip' && !r.nos.includes(BASE));
+
+  r = await run('stop', { prevRows: [R(BASE, 150)], cur: [R(BASE, 120), R('20261120000000001', 2, 'AA00376')], answer: '停止' });
+  check('選「停止」：丟錯（還沒批次確認），檔案不動', r.err && /停止/.test(r.err) && r.nos.length === 2, r.err);
+
+  r = await run('dry', { prevRows: [R(BASE, 150)], cur: [R(BASE, 120), R('20261120000000001', 2, 'AA00376')], dryRun: true });
+  check('試跑：不問、不改檔案', r.out && r.out.orders[0].case === 'dry' && !r.asked && r.nos.length === 2);
+
+  r = await run('addr', { prevRows: [R(BASE, 150)], cur: [R(BASE, 150, null, '台北市'), R('20261120000000001', 2, 'AA00376')], answer: 1 });
+  check('地址改了也算有改', r.asked && /地址/.test(r.asked.msg));
+
+  const bad = results.filter((x) => !x).length;
+  console.log(bad ? `失敗 ${bad}/${results.length}` : `全部通過 ${results.length}/${results.length}`);
+  fs.rmSync(TMP, { recursive: true, force: true });
+  process.exit(bad ? 1 : 0);
+})().catch((e) => { console.log('測試本身出錯：', e); process.exit(2); });
