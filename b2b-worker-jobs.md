@@ -729,3 +729,25 @@ Jay 預估影響最大的是各地的上傳下載時間、託運單／訂單 PDF
 - 上線：shipment.html 分頁重新整理、b2b-worker 重新啟動才生效。
 - 還沒驗證：真的 OCR 時進度有沒有照頁更新、認出／要人工的數字跟畫面「待人工比對」對不對得上。
 - 下一步：④ 拿到託運單 PDF 就先 OCR（等 ②③ 實跑穩定再做）。
+
+### 14-3 ② 補充：xintea_stage2.py 認得切檔後的訂單明細（2026-11-24）
+
+- `GENERATED_RE` 原本只認 `訂單明細_YYYY-MM-DD.pdf`，切檔後的 `訂單明細_YYYY-MM-DD-1.pdf` 會被當成心茶給的明細、再上傳到 shipment 解析 → 改成 `(-\d+)?`。`tests/test-detail-split.js` 多給心茶自動化資料夾就會檢查（舊版紅燈 → 12/12）。備份 `xintea_stage2.py.bak_2026-11-24`。
+
+### 14-3 ④ 實作狀態：拿到 PDF 就先 OCR（2026-11-24，b2c-start-2026-11-24-4、b2c-ship-2026-11-24-4、b2b-worker-2026-11-24-2、agent-driver driver-2026-11-24-2、shipment.html v2026-11-24-128、網頁 xintea-ship-2026-11-24-2）
+
+Jay 2026-11-24 選：**另外排一個工作**（不放在第 1 段裡，第 1 段照舊先完成）＋**加按鈕**（心茶分批補給 PDF 時用）。
+
+- 新工作 `type: 'b2cOcr'`，`parent`＝第 1 段工作 id；關卡權限跟 ① 出貨開始一樣（`start1`）。
+  - 自動：第 1 段正式跑完（不是試跑、不是重跑禮盒／補上傳新竹），資料夾裡有心茶的 PDF（檔名有 託運單／明細／結尾 訂單.pdf，不算 shipment 產生的列印檔）→ 排一個 `{ type:'b2cOcr', parent, auto:true, mmdd }`，`R.ocrJob` 記它的 id；沒有 PDF 就寫「先不排」。排失敗只寫 ⚠，不影響第 1 段。
+  - 按鈕：網頁第 1 段卡片「🔍 再抓 Drive＋先 OCR」→ `{ type:'b2cOcr', parent, drive:true }`，先用 `drivePdfs` 重抓 Drive 今天的 PDF 到那個資料夾。
+- 工作程式（b2c-ship `b2cOcr`）：用 parent 找資料夾、核對 `出廠日.txt`（跟第 2 段共用 `checkDayDir`）→（drive）重抓 Drive → `xintea_stage2.py pdfs` 裁切、列清單 → shipment.html 上傳總表＋解析 PDF（agent-driver `runStage2` 的 `parseOnly`：解析完就結束，不比對、不產生）→ 執行紀錄有每頁進度（③）、最後寫「認出 X 張、要人工 Y 張」。
+  - 總表一定先上傳：自建宅配沒有訂單明細，新竹託運單要靠總表建的訂單比對。
+  - 解析出錯 → 工作失敗（網頁看得到），第 2 段照舊會再解析。
+- 第 2 段不用改：照舊上傳資料夾全部 PDF，shipment 用雜湊認出已經解析過 → 跳過，不會再 OCR 一次。shipment.html 把跳過的檔數記在 `__shipParse.dup`，第 2 段執行紀錄寫「N 個檔已經 OCR 過（先 OCR 或之前跑過），跳過」（不會只寫 認出 0、要人工 0 讓人誤會）。
+- 網頁：監聽多 `b2cOcr`；「🔍 先 OCR」卡片（Drive 抓到幾個、解析幾個 PDF、認出／要人工、待人工比對池、執行紀錄）；第 1 段卡片顯示最近一次先 OCR 的狀態和按鈕（排隊／執行中時按鈕不能按）。
+- **工作程式一次只跑一個工作**：先 OCR 跑的時候（旺季幾十分鐘），之後才按的工作（B2B 回報、SG 接收、第 2 段）要等它跑完；第 1 段跑的期間就排進來的工作會先跑。
+- 測試 `tests/test-ocr-early.js`（S1 第 1 段自動排、S2 b2cOcr、S3 parseOnly、S4 已解析過的檔數）：舊版 18/23 紅燈 → 23/23；`tests/test-ship-web.js` 多 5 項 → 18/18。其他測試照舊全過。
+- 備份：`b2c-start.js.bak_2026-11-24-3`、`b2c-ship.js.bak_2026-11-24-3`、`b2b-worker.js.bak_2026-11-24-1`、`shipment.html.bak_v2026-11-24-127`、`agent-driver.js.bak_driver-2026-11-24-1`、`shipment\xintea-ship.html.bak_xintea-tools_2026-11-24-1`。
+- 上線：工作程式重新啟動、shipment.html 分頁重新整理；網頁（按鈕、先 OCR 卡片）要合併到 main 才會上 GitHub Pages（沒合併前，自動排的先 OCR 照樣會跑，只是手機上看不到卡片）。
+- 還沒驗證：真的第 1 段結束自動排、shipment 只解析不比對、第 2 段真的跳過已解析的 PDF。
