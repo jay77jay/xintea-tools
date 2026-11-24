@@ -707,3 +707,25 @@ Jay 預估影響最大的是各地的上傳下載時間、託運單／訂單 PDF
 - 逐張取（LabPDF.aspx，一張一個請求）沒有改：本來就一張一張，不受 300 上限影響。
 - 測試 `tests/test-hct-batch.js`（假新竹：勾超過 300 列不給 PDF）：舊版 650 張一次勾 → 新竹拒絕、90 秒逾時（6/8 紅燈）；新版 8/8（650 張分 300／300／50、合併 650 頁；已列印重印 350 張分 2 批；混別人的單只印自己的 310 張）。`tests/test-hct.js` 11/11 照舊通過。備份 `b2c-start.js.bak_2026-11-24-2`。
 - 還沒驗證：真的新竹一次印 300 張要多久、超過 300 時新竹實際回什麼。
+
+### 14-3 ② 實作狀態（2026-11-24，shipment.html v2026-11-24-127，公司電腦本機 session）
+
+- `genDetailBtn`（產生訂單明細）：照勾選的順序每 `DETAIL_CHUNK`＝200 單切一個檔，每檔各用一份新的 PDF（不在記憶體疊全部頁數）；`#順序` 戳記仍是全部連號（第 2 檔第 1 頁是 `#201/N`）。
+- 檔名：200 單以內照舊 `訂單明細_YYYY-MM-DD.pdf`；超過 200 單 `訂單明細_YYYY-MM-DD-1.pdf`、`-2.pdf`…（`print_config.json` 的 `^訂單明細_` 照樣對得到印表機）。日期改用台灣時區 `getTodayTW()`（原本用 `toISOString`，早上 8 點前會是前一天）。
+- 代跑：agent-driver 攔截每個下載各存一次（每檔 ≤ 約 160 MB，不會碰到 `/agent/file` 300 MB 上限），b2c-ship 的列印計畫照存檔順序列出每個檔。手動在瀏覽器按時會連續下載多個檔（Chrome 第一次可能問「允許下載多個檔案」）。
+- 測試 `tests/test-detail-split.js`（從 shipment.html 抽出按鈕程式，用假 pdf-lib／Storage 跑）：舊版 7/11 紅燈 → 11/11。備份 `shipment\shipment.html.bak_v2026-11-16-126`。
+- shipment 資料夾不在 git，改的是公司電腦 `D:\AI Design Project\shipment\shipment.html` 本身。
+- 還沒驗證：真的 300 單以上產生、存檔、送印。
+
+### 14-3 ③ 實作狀態（2026-11-24，shipment.html v2026-11-24-127、agent-driver driver-2026-11-24-1、b2c-ship-2026-11-24-3、b2b-worker-2026-11-24-1）
+
+- shipment.html「開始解析」：寫 `window.__shipParse`（`phase` OCR→託運單比對→完成、檔名、第幾個檔、第幾頁／共幾頁、已讀頁數、託運單第幾張／共幾張、`matched`、`manual`），包在 try 裡，出錯不影響解析。完成時 parseLog 多一行「託運單 OCR 認出 X 張、要人工 Y 張」。
+  - **認出 X 張**＝自動比對成功的標籤數（`matchedOrderNos` 加總，一頁 2 張算 2）；**要人工 Y 張**＝這次放進「待人工比對」的筆數（比對不到＋姓名同時符合多筆）。
+- agent-driver：`XA.cur`（目前步驟）、`XA.progress()`；PDF解析那一步帶出 `ocrMatched`、`ocrManual`、`ocrWaybills`、`pages`（舊版 shipment.html 沒有 `__shipParse` → 不帶，照常跑）。
+- b2c-ship：⑤ 抽成 `runShipment`，runStage2 跑的時候每 30 秒讀一次 `XA.progress()`，有變才寫「⏳ PDF解析：黑貓.pdf（第 1/2 個檔）第 15/40 頁，已讀 15 頁」「⏳ PDF解析：託運單比對 10/30（目前認出 8、要人工 2）」；跑完寫「OCR 認出 X 張、要人工 Y 張（託運單頁 N、共讀 M 頁，耗時）」，結果存 `R.shipment.steps[PDF解析].ocrMatched／ocrManual` 和 `R.ocr`。
+- b2b-worker：執行紀錄只留最後 80 行，旺季 45 分鐘每 30 秒一行會把前面紀錄擠掉 → `jobLogger` 遇到「⏳」開頭、上一行也是「⏳」就原地更新，執行紀錄只多一行最新進度。
+- 測試 `tests/test-ocr-progress.js`（A shipment 解析、B agent-driver、C b2c-ship、D jobLogger）：舊版全部紅燈 → 19/19。舊測試 test-sg-wait 7/7、test-ship-parent 9/9、test-worker-listen 5/5、test-shipdate 19/19、test-hct-batch 8/8、test-rethrow 23/23、test-ship-web 13/13。（第一次連跑時 test-sg-wait、test-rethrow、test-shipdate 失敗，重跑多次都通過、沒重現，錯誤訊息沒留下；再遇到要存完整輸出。）
+- 備份：`shipment\agent-driver.js.bak_driver-2026-11-23-1`、`B2B\b2c-ship.js.bak_2026-11-24-2`、`B2B\b2b-worker.js.bak_2026-11-23-1`。
+- 上線：shipment.html 分頁重新整理、b2b-worker 重新啟動才生效。
+- 還沒驗證：真的 OCR 時進度有沒有照頁更新、認出／要人工的數字跟畫面「待人工比對」對不對得上。
+- 下一步：④ 拿到託運單 PDF 就先 OCR（等 ②③ 實跑穩定再做）。
