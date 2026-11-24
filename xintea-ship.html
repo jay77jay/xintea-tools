@@ -66,22 +66,30 @@
         <label>時段 <select id="label"><option value="">（一天一次）</option><option>上午</option><option>中午</option><option>下午</option></select></label>
         <label class="sub"><input type="checkbox" id="dry1"> 試跑（只下載、檢查，不動 BPM／SG／新竹／禮盒）</label>
       </div>
+      <div class="row" style="margin-bottom:10px">
+        <label>最早可出廠日 從 <input type="date" id="shipFrom"></label>
+        <label>到 <input type="date" id="shipTo"></label>
+        <span class="sub">平常兩個都是今天；旺季提早包裝就把「到」往後選。一次只會做一個出廠日，抓到不只一天會先問你。</span>
+      </div>
       <details class="sub" style="margin-bottom:10px"><summary>進階</summary>
         <div class="row" style="margin-top:6px">新竹出貨日期（測試用，平常留空）<input type="text" id="hctDate" placeholder="2026/11/22" style="width:120px"></div>
       </details>
       <button id="start1" class="big" disabled>出貨開始</button>
       <div class="sub" id="wdHint" style="margin-top:6px"></div>
-      <div class="sub" style="margin-top:8px">依序：BPM 總表 → 禮盒增加數 → 建 SG 採購單並列印（同仁可以開始做）→ 物流表 → 批次確認 → 整單 → 新竹上傳與託運單 → Drive 抓今天的 PDF。<br>同一天第二次以後的通知請選時段（上午／中午／下午）。</div>
+      <div class="sub" style="margin-top:8px">依序：BPM 總表 → 禮盒增加數 → 建 SG 採購單並列印（同仁可以開始做）→ 物流表 → 批次確認 → 整單 → 新竹上傳與託運單 → Drive 抓今天的 PDF。<br>同一天第二次以後的通知請選時段（上午／中午／下午）。<br>資料夾：先用今天的「心茶MMDD」；今天的資料夾已經是別的出廠日，就改用出廠日命名（例 下午包 12/1 → 心茶1201）。新竹出貨日期＝出廠日。</div>
       <div id="lock1" class="lock"></div>
     </div>
 
     <div class="card">
       <h2>② 同仁做完、SG 已接收 → 第 2 段</h2>
       <div class="row" style="margin-bottom:10px">
-        <label>出貨日 MMDD <input type="text" id="mmdd" maxlength="4" style="width:80px"></label>
+        <label>第 1 段那次 <select id="run1" style="max-width:100%"><option value="">（讀取中）</option></select></label>
         <label class="sub"><input type="checkbox" id="dry2"> 試跑（只檢查，不入庫、不上傳）</label>
         <label class="sub"><input type="checkbox" id="retry2"> 只重傳無庫存（不傳新的 SG出）</label>
       </div>
+      <details class="sub" style="margin-bottom:10px"><summary>進階</summary>
+        <div class="row" style="margin-top:6px"><label>直接打資料夾 MMDD（選單選「用這裡的 MMDD」才會用）<input type="text" id="mmdd" maxlength="4" style="width:80px"></label></div>
+      </details>
       <button id="start2" class="big green" disabled>採購回報完成 → 開始第 2 段</button>
       <div class="sub" style="margin-top:8px">依序：SG 入庫 → SG出 上傳（含無庫存舊單）→ 拆可出貨／無庫存 → 託運單裁切 → 比對 → 產生列印檔。做完停下來等「送印」、「確認出貨」。<br>「只重傳無庫存」：新接收入庫、要補無庫存單時用，只把無庫存資料夾的單重傳，當成新的一批。</div>
       <div id="lock2" class="lock"></div>
@@ -112,7 +120,7 @@ const firebaseConfig = {
   messagingSenderId: "175590672953",
   appId: "1:175590672953:web:6304ddce7b45b191529be8"
 };
-const VERSION = 'xintea-ship-2026-11-23-2';
+const VERSION = 'xintea-ship-2026-11-24-1';
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth(), db = firebase.firestore();
 const COL = 'xintea_b2b_jobs';
@@ -127,7 +135,35 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const pad = (n) => String(n).padStart(2, '0');
 const tw = (iso) => iso ? new Date(iso).toLocaleString('zh-TW', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
-const d0 = new Date(); $('mmdd').value = pad(d0.getMonth() + 1) + pad(d0.getDate());
+/** 台灣今天 YYYY-MM-DD（不用 toISOString：那是 UTC，早上 8 點前會變成昨天） */
+function todayTW() { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
+const md = (ymd) => ymd.slice(5, 7) + ymd.slice(8, 10);
+$('mmdd').value = md(todayTW());
+$('shipFrom').value = todayTW(); $('shipTo').value = todayTW();
+$('shipFrom').onchange = () => { if ($('shipTo').value < $('shipFrom').value) $('shipTo').value = $('shipFrom').value; };
+
+/* ---- 第 13 節：② 選第 1 段那次（純函式，tests/test-ship-web.js 會測）----
+   列出 14 天內完成、非試跑的「出貨開始」（不含重跑禮盒、補上傳新竹），新的在前。
+   文字：心茶MMDD（時段）→ 出廠日 MM/DD；那次已經跑過第 2 段就標「第 2 段已跑過」。 */
+function run1Choices(jobs, nowMs) {
+  const since = nowMs - 14 * 86400e3;
+  const shipped = new Set(jobs.filter((j) => j.type === 'b2cShip' && j.parent && j.status === 'done' && !j.dryRun).map((j) => j.parent));
+  return jobs.filter((j) => j.type === 'b2cStart' && j.status === 'done' && !j.dryRun && !j.only && Date.parse(j.createdAt) >= since)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .map((j) => {
+      const r = j.result || {}, mmdd = /^\d{4}$/.test(r.mmdd || '') ? r.mmdd : j.mmdd;
+      const ship = /^\d{4}-\d{2}-\d{2}$/.test(r.shipDate || '') ? r.shipDate : null;
+      const at = new Date(j.createdAt), when = `${at.getMonth() + 1}/${at.getDate()} ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+      return { id: j.id, mmdd, shipDate: ship,
+        text: `心茶${mmdd}${j.label ? '（' + j.label + '）' : ''}${ship ? (j.label ? '' : ' ') + '→ 出廠日 ' + ship.slice(5).replace('-', '/') : ''}　${when} 跑${shipped.has(j.id) ? '（第 2 段已跑過）' : ''}` };
+    });
+}
+/* ---- end run1Choices ---- */
+function fillRun1() {
+  const sel = $('run1'), keep = sel.value, list = run1Choices(lastJobs, Date.now());
+  sel.innerHTML = list.map((c) => `<option value="${esc(c.id)}">${esc(c.text)}</option>`).join('') + '<option value="">（用「進階」打的 MMDD）</option>';
+  if (keep && list.some((c) => c.id === keep)) sel.value = keep;
+}
 $('ver').textContent = VERSION;
 $('windowDays').oninput = () => { wdEdited = true; };
 let lastWD = null, wdEdited = false, lastSnapWD = null, lastJobWD = null;
@@ -223,17 +259,26 @@ $('start1').onclick = async () => {
   const windowDays = parseInt($('windowDays').value, 10);
   if (!(windowDays >= 1 && windowDays <= 60)) return alert('抓取天數要是 1～60 的數字');
   if (hctDate && !/^\d{4}\/\d{2}\/\d{2}$/.test(hctDate)) return alert('新竹日期格式：2026/11/22');
-  const today = lastJobs.filter((j) => j.type === 'b2cStart' && !j.dryRun && j.status !== 'error' && j.mmdd === pad(new Date().getMonth() + 1) + pad(new Date().getDate()));
+  // 第 13 節：最早可出廠日區間
+  const t = todayTW(), shipFrom = $('shipFrom').value || t, shipTo = $('shipTo').value || shipFrom;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(shipFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(shipTo)) return alert('最早可出廠日請選日期');
+  if (shipTo < shipFrom) return alert('最早可出廠日「到」不能比「從」早');
+  if (shipFrom < t && !confirm(`最早可出廠日從 ${shipFrom} 開始，比今天早。確定？`)) return;
+  const range = shipFrom === shipTo ? (shipFrom === t ? '今天' : shipFrom) : `${shipFrom} 到 ${shipTo}`;
+  const today = lastJobs.filter((j) => j.type === 'b2cStart' && !j.dryRun && j.status !== 'error' && j.mmdd === md(t));
   if (!label && !dry && today.length && !confirm('今天已經跑過「出貨開始」了。第二次通知請選「上午／下午」時段，不然禮盒工具會擋下來。仍要送出？')) return;
-  if (!confirm(`${dry ? '【試跑】' : ''}開始第 1 段${label ? '（' + label + '）' : ''}？\n禮盒工具抓未來 ${windowDays} 天${lastWD && lastWD !== windowDays ? '（上一次是 ' + lastWD + ' 天，這次改了）' : ''}${hctDate ? '\n新竹出貨日期用 ' + hctDate : ''}`)) return;
-  try { await addJob({ type: 'b2cStart', label, windowDays, dryRun: dry, hctDate: hctDate || null, mmdd: pad(new Date().getMonth() + 1) + pad(new Date().getDate()) }); } catch (e) { alert('送出失敗：' + e.message); }
+  if (!confirm(`${dry ? '【試跑】' : ''}開始第 1 段${label ? '（' + label + '）' : ''}？\n最早可出廠日：${range}\n禮盒工具抓未來 ${windowDays} 天${lastWD && lastWD !== windowDays ? '（上一次是 ' + lastWD + ' 天，這次改了）' : ''}${hctDate ? '\n新竹出貨日期用 ' + hctDate : ''}`)) return;
+  try { await addJob({ type: 'b2cStart', label, windowDays, dryRun: dry, hctDate: hctDate || null, mmdd: md(t), shipFrom, shipTo }); } catch (e) { alert('送出失敗：' + e.message); }
 };
 $('start2').onclick = async () => {
-  const mmdd = $('mmdd').value.trim(); const dry = $('dry2').checked; const retryOnly = $('retry2').checked;
-  if (!/^\d{4}$/.test(mmdd)) return alert('出貨日要是 4 位數字，例如 1117');
+  const dry = $('dry2').checked; const retryOnly = $('retry2').checked;
+  // 第 13 節：選第 1 段那次（帶 parent，工作程式用它找資料夾和出廠日）；選單最後一項才用「進階」打的 MMDD
+  const pick = run1Choices(lastJobs, Date.now()).find((c) => c.id === $('run1').value);
+  const mmdd = pick ? pick.mmdd : $('mmdd').value.trim();
+  if (!pick && !/^\d{4}$/.test(mmdd)) return alert('請選第 1 段那次；或在「進階」打 4 位數字的資料夾 MMDD，例如 1117');
   const what = dry ? '只檢查，不會入庫、不會上傳。' : retryOnly ? '會在 SG 入庫，然後只重傳無庫存資料夾裡的單（不傳新的 SG出），當成新的一批。' : '會在 SG 入庫、上傳 SG出，請確認同仁已經接收採購單。';
-  if (!confirm(`${dry ? '【試跑】' : ''}開始 心茶${mmdd} 第 2 段${retryOnly ? '（只重傳無庫存）' : ''}？\n\n${what}`)) return;
-  try { await addJob({ type: 'b2cShip', mmdd, dryRun: dry, retryOnly }); $('retry2').checked = false; } catch (e) { alert('送出失敗：' + e.message); }
+  if (!confirm(`${dry ? '【試跑】' : ''}開始第 2 段${retryOnly ? '（只重傳無庫存）' : ''}？\n${pick ? pick.text : '心茶' + mmdd + '（進階：直接打的 MMDD）'}\n\n${what}`)) return;
+  try { await addJob(Object.assign({ type: 'b2cShip', mmdd, dryRun: dry, retryOnly }, pick ? { parent: pick.id } : {})); $('retry2').checked = false; } catch (e) { alert('送出失敗：' + e.message); }
 };
 window.rerunGiftbox = async (id) => {
   const j = lastJobs.find((x) => x.id === id) || {};
@@ -277,6 +322,7 @@ function statusPill(j) {
 function renderJobs() {
   children = {};
   for (const j of lastJobs) if (j.parent) (children[j.parent] = children[j.parent] || []).push(j);
+  fillRun1();
   const top = lastJobs.filter((j) => j.type === 'b2cStart' || j.type === 'b2cShip').sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 6);
   $('jobs').innerHTML = top.map((j) => j.type === 'b2cStart' ? renderStart(j) : renderShip(j)).join('') || '<div class="card sub">還沒有紀錄</div>';
 }
@@ -293,7 +339,7 @@ function renderAsk(j) {
 const stepIcon = (v) => !v ? '' : v.ok ? '✅' : '⚠';
 function renderStart(j) {
   const r = j.result || j.partial || {}; const st = r.steps || {};
-  let h = `<div class="card"><div class="row" style="justify-content:space-between"><b>① ${j.only === 'giftbox' ? '重跑禮盒＋採購單' : j.only === 'hct' ? '補上傳新竹' : '出貨開始'} 心茶${esc(r.mmdd || j.mmdd || '')}${j.label ? '（' + esc(j.label) + '）' : ''}${j.dryRun ? '（試跑）' : ''}</b>${statusPill(j)}</div>
+  let h = `<div class="card"><div class="row" style="justify-content:space-between"><b>① ${j.only === 'giftbox' ? '重跑禮盒＋採購單' : j.only === 'hct' ? '補上傳新竹' : '出貨開始'} 心茶${esc(r.mmdd || j.mmdd || '')}${j.label ? '（' + esc(j.label) + '）' : ''}${r.shipDate ? ' → 出廠日 ' + esc(r.shipDate.slice(5).replace('-', '/')) : (j.shipFrom && (j.shipFrom !== j.shipTo || md(j.shipFrom) !== j.mmdd) ? '（出廠日 ' + esc(j.shipFrom.slice(5).replace('-', '/')) + (j.shipTo !== j.shipFrom ? '～' + esc(j.shipTo.slice(5).replace('-', '/')) : '') + '）' : '')}${j.dryRun ? '（試跑）' : ''}</b>${statusPill(j)}</div>
     <div class="sub">${esc(tw(j.createdAt))}　${esc(j.by || '')}　${esc(r.step || '')}</div>`;
   if (j.error) h += `<div class="note bad">❌ ${esc(j.error)}</div>`;
   h += renderAsk(j);
@@ -302,7 +348,7 @@ function renderStart(j) {
   add('BPM 總表', (v) => `${v.rows} 列`);
   add('禮盒增加數', (v) => (v.windowDays ? `（未來 ${v.windowDays} 天）` : '') + (v.dryRun ? '試跑' : (v.items && v.items.length ? `要做 ${v.items.length} 種：${esc(v.items.map((i) => i.sku + '×' + i.qty).join('、'))}` : '沒有要新增製作的禮盒')) + (v.notes && v.notes.length ? `<div class="note">${esc(v.notes.join('\n'))}</div>` : ''));
   add('SG 採購單', (v) => `<b>${esc(v.po)}</b> ${v.existed ? '（沿用已建立的）' : ''}${v.printed ? '　🖨 已送印' : '　送印失敗：' + esc(v.printError)}`);
-  add('BPM 物流表', (v) => v.rows ? `${v.rows} 列、${v.orders} 單${v.deleted ? `（${v.deleted} 列是刪除狀態，只確認、不整單）` : ''}` : '今天沒有要出的單');
+  add('BPM 物流表', (v) => v.rows ? `${v.rows} 列、${v.orders} 單${v.deleted ? `（${v.deleted} 列是刪除狀態，只確認、不整單）` : ''}${r.shipDate ? `　出廠日 ${esc(r.shipDate)} → 心茶${esc(r.mmdd)}` : ''}` : '這次沒有要出的單');
   // 規格第 11 節：重拋單（同單號舊的列「訂單刪除」、重開新的一列）
   const RT = { new: () => '之前沒下載過，新的照常整單', a: () => '內容沒變，只確認、不整單', dry: (o) => '試跑：內容有改（' + (o.diff || []).join('；') + '），正式跑會停下來問',
     b1: (o) => '內容有改（' + (o.diff || []).join('；') + '），' + (o.by || '') + ' 確認舊版已移除，新的照常整單',
@@ -341,7 +387,7 @@ function renderShip(j) {
   const r = j.result || j.partial || {};
   const kids = (children[j.id] || []).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
   const printJob = kids.filter((k) => k.type === 'b2cPrint').pop(), confJob = kids.filter((k) => k.type === 'b2cConfirm').pop();
-  let h = `<div class="card"><div class="row" style="justify-content:space-between"><b>② 第 2 段 心茶${esc(j.mmdd)}${j.retryOnly ? '（只重傳無庫存）' : ''}${j.dryRun ? '（試跑）' : ''}</b>${statusPill(j)}</div>
+  let h = `<div class="card"><div class="row" style="justify-content:space-between"><b>② 第 2 段 心茶${esc(r.mmdd || j.mmdd)}${r.shipDate ? ' → 出廠日 ' + esc(r.shipDate.slice(5).replace('-', '/')) : ''}${j.retryOnly ? '（只重傳無庫存）' : ''}${j.dryRun ? '（試跑）' : ''}</b>${statusPill(j)}</div>
     <div class="sub">${esc(tw(j.createdAt))}　${esc(j.by || '')}　${esc(r.step || '')}</div>`;
   if (j.error) h += `<div class="note bad">❌ ${esc(j.error)}</div>`;
   if (r.stockIn) {

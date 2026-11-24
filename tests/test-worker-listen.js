@@ -8,13 +8,15 @@ const SRC = path.resolve(process.argv[2], 'b2b-worker.js');
 // ---- 假 Firestore（只做 b2b-worker.js 用到的部分）----
 const docs = new Map(); let seq = 0; const qListeners = [];
 const clone = (o) => JSON.parse(JSON.stringify(o));
+const { noUndefined } = require('./firestore-strict');
 const snapDoc = (col, id) => ({ id, exists: docs.has(col + '/' + id), ref: ref(col, id), data: () => (docs.has(col + '/' + id) ? clone(docs.get(col + '/' + id)) : undefined) });
 function ref(col, id) {
   const k = col + '/' + id;
   return { id,
     get: async () => snapDoc(col, id),
-    set: async (o, opt) => { docs.set(k, Object.assign(opt && opt.merge ? (docs.get(k) || {}) : {}, clone(o))); emit(); },
-    update: async (o) => { docs.set(k, Object.assign(docs.get(k) || {}, clone(o))); emit(); },
+    // 非 async：跟真的一樣碰到 undefined 同步丟錯（規格第 12 節；原本 JSON 複製會默默丟掉 undefined）
+    set: (o, opt) => { noUndefined(o, 'Set()'); docs.set(k, Object.assign(opt && opt.merge ? (docs.get(k) || {}) : {}, clone(o))); emit(); return Promise.resolve(); },
+    update: (o) => { noUndefined(o, 'Update()'); docs.set(k, Object.assign(docs.get(k) || {}, clone(o))); emit(); return Promise.resolve(); },
     onSnapshot: (next) => { next(snapDoc(col, id)); return () => {}; } };
 }
 function query(col, filters) {
@@ -38,7 +40,7 @@ function deliver(L) {
 }
 function emit() { for (const L of qListeners) setImmediate(() => deliver(L)); }
 const db = {
-  collection: (col) => Object.assign(query(col, []), { doc: (id) => ref(col, id), add: async (o) => { const id = 'j' + (++seq); docs.set(col + '/' + id, clone(o)); emit(); return ref(col, id); } }),
+  collection: (col) => Object.assign(query(col, []), { doc: (id) => ref(col, id), add: (o) => { noUndefined(o, 'Add()'); const id = 'j' + (++seq); docs.set(col + '/' + id, clone(o)); emit(); return Promise.resolve(ref(col, id)); } }),
 };
 // 模擬網路斷線：所有清單監聽收到錯誤（Firestore 給錯誤後監聽就結束，不會再送資料）
 function breakListeners(msg) { for (const L of qListeners) if (L.active) { L.active = false; L.err(new Error(msg)); } }
