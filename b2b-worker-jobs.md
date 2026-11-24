@@ -587,6 +587,14 @@ b2b-worker-2026-11-18-16 重印 PO-0718（心茶配送單-20261111-1）失敗：
 - 修法：`deleted` 用數字（沒有就 0）。**不要**用 `ignoreUndefinedProperties` 整個關掉檢查，那會把「欄位名稱打錯」這類錯誤藏起來。
 - 測試漏洞：`tests/test-rethrow.js` 的假 Firestore `update: async () => {}` 什麼都收，`tests/test-worker-listen.js` 的假 Firestore 用 `JSON.parse(JSON.stringify())` 會默默丟掉 undefined。兩個假 Firestore 都要改成**碰到 undefined 就丟出跟真的一樣的錯誤**，再加一個情境：物流表沒有刪除列，跑「BPM 物流表」步驟，先看到紅燈、修好變綠燈。
 
+### 12-1 實作狀態（b2c-start-2026-11-24-1，公司電腦本機 session）
+
+- 判斷 1 成立：`b2c-start.js:1198` 寫 `deleted: dels.length || undefined`。同一行的 `rethrows: rethrows.length || undefined` 也一樣（判斷 3 部分成立：沒有重拋單的日子每次都會壞）。兩個都改成數字，沒有就 0；沒開 `ignoreUndefinedProperties`。原檔備份 `b2c-start.js.bak_2026-11-23-5`。
+- 真的 firebase-admin 的 `update()` 是**當場丟錯**（不是回傳失敗的 promise），所以 `ref.update(x).catch(() => {})` 接不到，錯誤往外跑，把整個第 1 段弄停了。
+- 測試（commit 6aa118f）：新增 `tests/firestore-strict.js`（碰到 undefined 就當場丟出跟真的一樣的錯）；`test-rethrow.js`、`test-worker-listen.js` 的假 Firestore 都改用它；`test-rethrow.js` 加兩個情境，跑真的第 1 段（試跑、假 BPM）到「BPM 物流表」：沒有刪除列／有刪除列。
+- 結果：23-5 版 test-rethrow 紅燈（錯 4/23，錯誤訊息跟 11/24 10:25 一模一樣）；24-1 版 23/23、test-worker-listen 5/5。
+- 工作程式 10:53 用新版重啟。
+
 ## 13. 最早可出廠日區間（Jay 2026-11-24：旺季提早包裝）
 
 旺季為了分散產能會提早包裝，第 1 段要能抓「最早可出廠日」是之後日期的單。
