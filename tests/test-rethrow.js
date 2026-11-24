@@ -39,7 +39,9 @@ const S = require(path.join(TMP, 'b2c-start.under-test.js'))({ db, COL_JOB: 'job
 const T = S._test;
 const results = [];
 const check = (name, ok, info) => { results.push(!!ok); console.log(`${ok ? '✅' : '❌'} ${name}${info ? '（' + info + '）' : ''}`); };
-const ref = { id: 'cur', update: async () => {} };
+// 跟真的一樣：碰到 undefined 同步丟錯（規格第 12 節；原本 async () => {} 什麼都收）
+const { noUndefined } = require('./firestore-strict');
+const ref = { id: 'cur', update: (o) => { noUndefined(o, 'Update()'); return Promise.resolve(); } };
 const log = async () => {};
 const ago = (h) => new Date(Date.now() - h * 3600e3).toISOString();
 const prevJob = (id, mmdd, file) => ({ id, type: 'b2cStart', status: 'done', mmdd, createdAt: ago(5), result: { mmdd, steps: { '整單': { file } } } });
@@ -57,6 +59,35 @@ async function run(name, { prevRows, ship, answer, dryRun, cur }) {
   const askFn = async (r, l, q) => { asked = q; const v = typeof answer === 'number' ? q.options[answer] : answer; return { value: v, by: '測試' }; };
   try { const out = await T.handleRethrows(ref, log, logi, { dryRun: !!dryRun, stamp: 'T' + n }, askFn); return { out, asked, logi, nos: readNos(full), full }; }
   catch (e) { return { err: e.message, asked, nos: readNos(full) }; }
+}
+
+// 跑真的 b2c-start.js 第 1 段（試跑）：假 BPM（page.evaluate）、假本機服務（fetch）、嚴格的假 Firestore
+// 回傳 BPM 物流表那一步最後寫進 partial 的內容
+async function runStart(logiRows) {
+  const ymd = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);   // 跟 b2c-start.js 的 todayYMD() 一樣（台北日期）
+  const b64 = (f) => fs.readFileSync(f).toString('base64');
+  const XT = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  const sumFile = xlsx(`_bpm/summary${++n}.xlsx`, [R('1', 1)]);
+  const logiFile = xlsx(`_bpm/logi${n}.xlsx`, logiRows);
+  const page = { url: () => 'https://xintea.jwcpas.com.tw/xin_tea/common/main_menu',
+    evaluate: async (fn, arg) => {
+      if (!arg) return true;   // bpmOk
+      if (arg.download === 'summary') return { rows: Array.from({ length: 3000 }, (_, i) => ({ key: '#s' + i + '-1', vc: 0, st: '新增', date: ymd })), file: { name: '_20261124_102500.xlsx', type: XT, b64: b64(sumFile) } };
+      if (arg.download === 'logistics') return { rows: logiRows.map((r) => ({ auto: 1, key: r[20], vc: 0, st: r[23], date: ymd })), file: { name: '_20261124_102526.xlsx', type: XT, b64: b64(logiFile) } };
+      return { rows: [] };
+    } };
+  const docs = {};
+  const sref = { id: 'start' + n, update: (o) => { noUndefined(o, 'Update()'); Object.assign(docs, JSON.parse(JSON.stringify(o))); return Promise.resolve(); } };
+  const W = { db, COL_JOB: 'jobs', browser: async () => ({ pages: () => [page], newPage: async () => { throw new Error('測試沒有瀏覽器'); } }),
+    pageFor: async () => { throw new Error('測試沒有瀏覽器'); }, sgReady: async () => { throw new Error('測試沒有 SG'); }, eipReady: async () => { throw new Error('測試沒有 EIP'); } };
+  const S2 = require(path.join(TMP, 'b2c-start.under-test.js'))(W);
+  const realFetch = global.fetch;
+  global.fetch = async (u, o) => (String(u).startsWith('http://127.0.0.1:8080') ? { json: async () => ({ ok: true, version: 'fake' }) } : realFetch(u, o));
+  JOBS = [];
+  let err = null;
+  try { await S2.handlers.b2cStart(sref, { type: 'b2cStart', label: '上午', dryRun: true }, async () => {}); } catch (e) { err = e.message; }
+  global.fetch = realFetch;
+  return { st: ((docs.partial || {}).steps || {})['BPM 物流表'], err };
 }
 
 (async () => {
@@ -111,8 +142,21 @@ async function run(name, { prevRows, ship, answer, dryRun, cur }) {
   check('拿掉訂單刪除、品項刪除的列', e.dropped === 2 && e.left === 2, JSON.stringify(e));
   check('同一次改兩遍，備份是最原始的那份', readNos(bk).length === 4 && readNos(f).length === 1, `備份 ${readNos(bk).length} 列、現在 ${readNos(f).length} 列`);
 
+  // 第 12 節（11/24 10:25）：物流表沒有刪除列，跑完整的第 1 段到「BPM 物流表」，寫 partial 不能有 undefined
+  {
+    const lg = await runStart([R('20261120000000011', 2, 'AA00376'), R('20261120000000012', 1, 'A020011')]);
+    check('物流表沒有刪除列：BPM 物流表步驟成功', lg.st && lg.st.ok === true, lg.st ? JSON.stringify(lg.st) : lg.err);
+    check('物流表沒有刪除列：沒有 undefined 寫入錯誤', !/undefined/.test(lg.err || '') && !/undefined/.test(JSON.stringify(lg.st || {})), lg.err);
+    check('物流表沒有刪除列：deleted、rethrows 記 0', lg.st && lg.st.deleted === 0 && lg.st.rethrows === 0, lg.st && `deleted=${lg.st.deleted} rethrows=${lg.st.rethrows}`);
+  }
+  {
+    const lg = await runStart([R(BASE, 150, null, null, '訂單刪除', 1), R('20261120000000011', 2, 'AA00376')]);
+    check('物流表有刪除列：BPM 物流表步驟成功、deleted=1', lg.st && lg.st.ok === true && lg.st.deleted === 1, lg.st ? JSON.stringify(lg.st) : lg.err);
+  }
+
   const bad = results.filter((x) => !x).length;
   console.log(bad ? `失敗 ${bad}/${results.length}` : `全部通過 ${results.length}/${results.length}`);
+  process.chdir(os.tmpdir());   // Windows 不能刪自己所在的資料夾
   fs.rmSync(TMP, { recursive: true, force: true });
   process.exit(bad ? 1 : 0);
 })().catch((e) => { console.log('測試本身出錯：', e); process.exit(2); });
