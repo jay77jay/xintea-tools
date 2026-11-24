@@ -18,6 +18,12 @@ check('② 舊的打 MMDD 留在「進階」', /<details[^>]*>[\s\S]{0,300}id="m
 check('卡片顯示出廠日', /出廠日 \$\{/.test(html) || /shipDate/.test(html.slice(html.indexOf('function renderStart'))));
 const ver = (html.match(/const VERSION = '(xintea-ship-[\d-]+)'/) || [])[1];
 check('版本號有更新', ver && ver > 'xintea-ship-2026-11-23-2', ver);
+// 規格 14-3 ④：先 OCR（b2cOcr）
+check('④ 監聽的工作類型含 b2cOcr', /'in', \[[^\]]*'b2cOcr'/.test(html));
+check('④ 有「再抓 Drive＋先 OCR」按鈕，送出 b2cOcr 帶 parent、drive:true', /type: 'b2cOcr'[^\n]*parent[^\n]*drive: true/.test(html) || /type: 'b2cOcr'[^\n]*drive: true[^\n]*parent/.test(html));
+check('④ 有先 OCR 的卡片（renderOcr）', /function renderOcr\(/.test(html));
+check('④ 第 1 段卡片顯示先 OCR 的狀態（認出／要人工）', /要人工/.test(html.slice(html.indexOf('function renderStart'), html.indexOf('function renderShip'))));
+check('④ 版本號 > xintea-ship-2026-11-24-1', ver && ver > 'xintea-ship-2026-11-24-1', ver);
 
 // ---- run1Choices（純函式）----
 const from = html.indexOf('function run1Choices('), to = html.indexOf('/* ---- end run1Choices ---- */');

@@ -1,5 +1,5 @@
 // 規格 14-3 ②：shipment.html「產生訂單明細」每 200 單切一個檔（600 單以上會超過 server.js /agent/file 300 MB 上限）
-// 用法：node test-detail-split.js <shipment.html 路徑>
+// 用法：node test-detail-split.js <shipment.html 路徑> [心茶自動化 資料夾（檢查 xintea_stage2.py 不會把切檔後的訂單明細再上傳）]
 // 把 genDetailBtn 的按鈕程式從 shipment.html 抽出來，在 vm 裡用假的 pdf-lib／Storage／DOM 跑，不連 Firebase、不開瀏覽器。
 'use strict';
 const fs = require('fs'), path = require('path'), vm = require('vm');
@@ -77,6 +77,18 @@ async function run(n, { missing = [] } = {}) {
   r = await run(3);
   check('3 單 → 1 個檔，檔名不加 -1', r.files.length === 1 && r.files[0].name === `訂單明細_${twToday}.pdf`, r.files.map((f) => f.name).join());
   check('檔名符合 print_config 的 ^訂單明細_', r.files.every((f) => /^訂單明細_/.test(f.name)));
+
+  // xintea_stage2.py 的 GENERATED_RE 要認得切檔後的檔名，不然會把產生的訂單明細當成心茶的明細再上傳解析
+  const SCRIPTS = process.argv[3];
+  if (SCRIPTS) {
+    const names = [`訂單明細_${twToday}.pdf`, `訂單明細_${twToday}-1.pdf`, `訂單明細_${twToday}-12.pdf`, `訂單明細_${twToday} (1).pdf`, `託運單_超商_${twToday}.pdf`, '20261124_官網訂單_711 訂單.pdf'];
+    let out = '';
+    try {
+      out = require('child_process').execFileSync('py', ['-3', '-c', `import sys,json; sys.path.insert(0, sys.argv[1]); import xintea_stage2 as m
+print(json.dumps([bool(m.GENERATED_RE.match(n)) for n in json.loads(sys.argv[2])]))`, SCRIPTS, JSON.stringify(names)], { encoding: 'utf8', env: Object.assign({}, process.env, { PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }) }).trim();
+    } catch (e) { out = 'ERR ' + e.message.slice(0, 200); }
+    check('xintea_stage2.py 認得切檔後的 訂單明細_日期-N.pdf 是產生的檔（不再上傳）', out.replace(/\s/g, '') === '[true,true,true,true,true,false]', out);
+  } else console.log('（沒給心茶自動化資料夾，略過 xintea_stage2.py 檢查）');
 
   const bad = results.filter((x) => !x).length;
   console.log(bad ? `失敗 ${bad}/${results.length}` : `全部通過 ${results.length}/${results.length}`);

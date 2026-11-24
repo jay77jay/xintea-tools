@@ -120,7 +120,7 @@ const firebaseConfig = {
   messagingSenderId: "175590672953",
   appId: "1:175590672953:web:6304ddce7b45b191529be8"
 };
-const VERSION = 'xintea-ship-2026-11-24-1';
+const VERSION = 'xintea-ship-2026-11-24-2';
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth(), db = firebase.firestore();
 const COL = 'xintea_b2b_jobs';
@@ -234,7 +234,7 @@ function watch() {
     refreshWD();
   }, () => refreshWD()));
   unsubs.push(db.collection(COL).doc('_settings').onSnapshot((s) => { S = Object.assign({ gates: {}, admins: [] }, s.data() || {}); applyLocks(); }, () => {}));
-  unsubs.push(db.collection(COL).where('type', 'in', ['b2cStart', 'b2cShip', 'b2cPrint', 'b2cConfirm']).onSnapshot((s) => {
+  unsubs.push(db.collection(COL).where('type', 'in', ['b2cStart', 'b2cShip', 'b2cPrint', 'b2cConfirm', 'b2cOcr']).onSnapshot((s) => {
     lastJobs = s.docs.map((d) => Object.assign({ id: d.id }, d.data()));
     const wj = lastJobs.filter((j) => j.type === 'b2cStart' && j.windowDays).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0];
     lastJobWD = wj ? { n: Number(wj.windowDays), at: wj.createdAt, src: `控制台 ${new Date(wj.createdAt).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })} ${wj.by || ''} 送出` } : null;
@@ -298,6 +298,12 @@ window.rerunHct = async (id, onlyLabels) => {
   if (!confirm(`補 心茶${j.mmdd}${j.label ? '（' + j.label + '）' : ''} 的新竹${onlyLabels ? '託運單' : '上傳＋託運單'}？\n${String(zd.file || '').split('/').pop()}\n\n${what}\n過程中要輸入新竹驗證碼。${hctDate ? '\n新竹出貨日期用 ' + hctDate : ''}`)) return;
   try { await addJob({ type: 'b2cStart', only: 'hct', parent: id, label: j.label || '', mmdd: j.mmdd, hctDate: hctDate || null }); sentNotice('✅ 已送出「補上傳新竹」，等一下最上面那張卡片會出現驗證碼'); } catch (e) { alert('送出失敗：' + e.message); }
 };
+// 規格 14-3 ④：心茶補給 PDF 時，重抓 Drive 今天的 PDF 再先 OCR（第 1 段跑完會自動排一次，不用 Drive 重抓）
+window.ocrAgain = async (id) => {
+  const j = lastJobs.find((x) => x.id === id) || {}; const r = j.result || {};
+  if (!confirm(`再抓 Drive＋先 OCR：心茶${r.mmdd || j.mmdd}${j.label ? '（' + j.label + '）' : ''}？\n\n會重抓 Drive 今天的 PDF 到這個資料夾、裁切託運單，再用 shipment.html 解析。已經解析過的 PDF 會自動跳過。\n旺季可能要跑幾十分鐘，這段期間其他工作要排隊。`)) return;
+  try { await addJob({ type: 'b2cOcr', parent: id, drive: true, mmdd: r.mmdd || j.mmdd }); sentNotice('✅ 已送出「再抓 Drive＋先 OCR」，進度看下面最上面那張卡片'); } catch (e) { alert('送出失敗：' + e.message); }
+};
 window.doPrint = async (id) => {
   if (!confirm('送印這次的所有列印檔？\n\n有黑貓託運單的話，請先在 MPC5502 手送台放厚紙。')) return;
   try { await addJob({ type: 'b2cPrint', parent: id }); } catch (e) { alert('送出失敗：' + e.message); }
@@ -323,8 +329,8 @@ function renderJobs() {
   children = {};
   for (const j of lastJobs) if (j.parent) (children[j.parent] = children[j.parent] || []).push(j);
   fillRun1();
-  const top = lastJobs.filter((j) => j.type === 'b2cStart' || j.type === 'b2cShip').sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 6);
-  $('jobs').innerHTML = top.map((j) => j.type === 'b2cStart' ? renderStart(j) : renderShip(j)).join('') || '<div class="card sub">還沒有紀錄</div>';
+  const top = lastJobs.filter((j) => j.type === 'b2cStart' || j.type === 'b2cShip' || j.type === 'b2cOcr').sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 6);
+  $('jobs').innerHTML = top.map((j) => j.type === 'b2cStart' ? renderStart(j) : j.type === 'b2cOcr' ? renderOcr(j) : renderShip(j)).join('') || '<div class="card sub">還沒有紀錄</div>';
 }
 function renderAsk(j) {
   const a = j.ask; if (!a || j.status !== 'running') return '';
@@ -378,7 +384,28 @@ function renderStart(j) {
     else if (busy) { if (j === pj) h += `<div class="sub" style="margin-top:8px">⏳ 補上傳新竹排隊／執行中，請看「補上傳新竹」卡片輸入驗證碼</div>`; }
     else h += `<div class="row" style="margin-top:10px"><button onclick="rerunHct('${pj.id}',${uploaded})" ${can('start1') ? '' : 'disabled'}>🔁 ${uploaded ? '只補新竹託運單' : (j === pj ? '補上傳新竹＋託運單' : '再補一次新竹')}</button><span class="sub">${uploaded ? '紀錄說已上傳；會先核對新竹，找不到會問你' : '只傳這次的物流表；上傳前會先查新竹有沒有重複'}</span></div>`;
   }
+  // 規格 14-3 ④：先 OCR（第 1 段跑完自動排；心茶補給 PDF 時按「再抓 Drive＋先 OCR」）
+  if (j.type === 'b2cStart' && !j.only && !j.dryRun && j.status === 'done') {
+    const ocrs = (children[j.id] || []).filter((k) => k.type === 'b2cOcr').sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+    const last = ocrs[ocrs.length - 1], busy = ocrs.some((k) => k.status === 'queued' || k.status === 'running');
+    const lr = last ? (last.result || last.partial || {}) : {};
+    if (last) h += `<div class="sub" style="margin-top:8px">${busy ? '⏳ 先 OCR 排隊／執行中（看「先 OCR」卡片）' : last.status === 'done' ? (lr.ocr ? `✅ 先 OCR：認出 ${lr.ocr.matched} 張、要人工 ${lr.ocr.manual} 張${lr.ocr.dup ? `（${lr.ocr.dup} 個檔之前解析過）` : ''}` : '✅ 先 OCR：' + esc(lr.step || '完成')) : '⚠ 先 OCR 沒完成：' + esc(last.error || last.status) + '（第 2 段照舊會解析）'}</div>`;
+    h += `<div class="row" style="margin-top:8px"><button class="sec" onclick="ocrAgain('${j.id}')" ${busy || !can('start1') ? 'disabled' : ''}>🔍 再抓 Drive＋先 OCR</button><span class="sub">心茶又補給 PDF 時用；已解析過的會跳過</span></div>`;
+  }
   if (j.giftboxShot) h += `<h3>禮盒增加數（長按存圖，貼到 DC）</h3><img class="shot" src="${esc(j.giftboxShot)}">`;
+  const logs = j.log || [];
+  if (logs.length) h += `<details ${j.status === 'running' ? 'open' : ''}><summary class="sub" style="margin-top:8px">執行紀錄</summary><pre class="log">${esc(logs.join('\n'))}</pre></details>`;
+  return h + '</div>';
+}
+function renderOcr(j) {
+  const r = j.result || j.partial || {};
+  let h = `<div class="card"><div class="row" style="justify-content:space-between"><b>🔍 先 OCR 心茶${esc(r.mmdd || j.mmdd || '')}${r.shipDate ? ' → 出廠日 ' + esc(r.shipDate.slice(5).replace('-', '/')) : ''}${j.drive ? '（再抓 Drive）' : j.auto ? '（第 1 段自動排）' : ''}</b>${statusPill(j)}</div>
+    <div class="sub">${esc(tw(j.createdAt))}　${esc(j.by || '')}　${esc(r.step || '')}</div>`;
+  if (j.error) h += `<div class="note bad">❌ ${esc(j.error)}</div>`;
+  if (r.drive) h += `<div>Drive：今天 ${r.drive.found} 個，新下載 ${r.drive.downloaded}</div>`;
+  if (r.pdfs) h += `<div>解析 ${(r.pdfs.pdfs || []).length} 個 PDF${r.pdfs.master ? '（含總表）' : ''}</div>` + ((r.pdfs.warnings || []).length ? `<div class="note">⚠ ${esc(r.pdfs.warnings.join('；'))}</div>` : '');
+  if (r.ocr) h += `<div>認出 <b>${r.ocr.matched}</b> 張、要人工 <b>${r.ocr.manual}</b> 張${r.ocr.dup ? `<span class="sub">（${r.ocr.dup} 個檔之前解析過，跳過）</span>` : ''}</div>`;
+  if (r.shipment && r.shipment.unmatched) h += `<div class="sub">待人工比對池還有 ${r.shipment.unmatched} 筆（到 shipment.html ② 處理）</div>`;
   const logs = j.log || [];
   if (logs.length) h += `<details ${j.status === 'running' ? 'open' : ''}><summary class="sub" style="margin-top:8px">執行紀錄</summary><pre class="log">${esc(logs.join('\n'))}</pre></details>`;
   return h + '</div>';
