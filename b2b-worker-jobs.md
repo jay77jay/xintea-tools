@@ -751,3 +751,16 @@ Jay 2026-11-24 選：**另外排一個工作**（不放在第 1 段裡，第 1 �
 - 備份：`b2c-start.js.bak_2026-11-24-3`、`b2c-ship.js.bak_2026-11-24-3`、`b2b-worker.js.bak_2026-11-24-1`、`shipment.html.bak_v2026-11-24-127`、`agent-driver.js.bak_driver-2026-11-24-1`、`shipment\xintea-ship.html.bak_xintea-tools_2026-11-24-1`。
 - 上線：工作程式重新啟動、shipment.html 分頁重新整理；網頁（按鈕、先 OCR 卡片）要合併到 main 才會上 GitHub Pages（沒合併前，自動排的先 OCR 照樣會跑，只是手機上看不到卡片）。
 - 還沒驗證：真的第 1 段結束自動排、shipment 只解析不比對、第 2 段真的跳過已解析的 PDF。
+
+## 15. 無庫存舊單搬到「已重傳」被鎖住（Jay 2026-11-24 14:29 實測，b2c-ship-2026-11-24-4 → 2026-11-24-5）
+
+- 現象：第 2 段「只重傳無庫存」報 `EBUSY: resource busy or locked, rename '…\無庫存訂單 心茶1124-1單.xlsx' -> '…\已重傳\…'`。
+- 原因：SG 已經匯入成功之後，要把檔案搬到「已重傳」時檔案正開著（修改時間 14:28:55，很可能開在 Excel），Windows 不讓搬 → 整個工作失敗；`sg_uploads.json` 還沒寫、拆檔／比對／列印檔都沒跑。SG 那筆 Jay 確認已匯入成功。
+- 修法（`uploadOrders`）：
+  1. SG 匯入完成後**先寫 `sg_uploads.json`**，再搬檔。
+  2. 搬檔（`moveResent`）遇到 EBUSY／EPERM／EACCES 隔 3 秒重試，最多 5 次。
+  3. 還是搬不動：執行紀錄寫 ⚠「請關掉這個檔後手動搬到已重傳」，結果記 `moveFailed`，**後面照常跑**（拆檔、比對、產生列印檔）。
+  4. 下一次第 2 段：無庫存資料夾裡的檔如果已經在 `sg_uploads.json`（上一批傳過、當時沒搬走）→ 先搬到已重傳，不再傳、不算進這一批；只剩這種檔時「只重傳無庫存」照舊說沒有要重傳的檔。
+- 今天那筆：重按「只重傳無庫存」→ SG 匯入清單兩天內有同檔名 → 沿用那次結果、不重傳 → 搬檔、拆檔、比對。
+- 測試 `tests/test-nostock-move.js`（假 SG、攔 `fs.renameSync` 假裝被鎖）：舊版 11/15 紅燈（錯誤訊息跟實測一樣）→ 15/15；test-sg-wait 7/7、test-ship-parent 9/9、test-ocr-progress 19/19、test-ocr-early 23/23、test-worker-listen 5/5 照舊。備份 `b2c-ship.js.bak_2026-11-24-4`。
+- 上線：工作程式重新啟動。
