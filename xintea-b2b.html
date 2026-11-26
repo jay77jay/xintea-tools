@@ -129,7 +129,7 @@ tr.det td{background:#fbfbfc;font-size:13px;color:#444}
    心茶B2B 生產回報  xintea-b2b.html
    ★★★ 可調整設定 ★★★
    ========================================================= */
-const APP_VERSION = 'v2026-11-24-1';
+const APP_VERSION = 'v2026-11-26-1';
 const COL_PO = 'xintea_b2b_po';                        // ★★★ Firestore 集合
 const BOX_TYPES = [                                    // ★★★ 箱型按鈕（順序即畫面順序）
   // 2026-11-24 Jay：只放包材。黑貓、LALA 是物流（配送單已有資料），算進來會虛增訂單處理費 → 拿掉；包材加 B01。
@@ -337,7 +337,7 @@ function renderList(){
     </div>
     <div id="jobPanel"></div>
     <div id="listOpen"></div>
-    <h3>最近已回報（可點開修改）</h3><div id="listDone"></div>`;
+    <details id="doneBox" style="margin-top:12px"><summary id="doneSum" style="cursor:pointer;font-weight:600;padding:6px 0"></summary><div id="listDone"></div></details>`;
   el.querySelectorAll('.sortbar button').forEach(b => b.onclick = () => { SORT = b.dataset.s; el.querySelectorAll('.sortbar button').forEach(x => x.classList.toggle('on', x === b)); draw(); });
   const draw = () => {
     const q = $('q').value.trim().toLowerCase();
@@ -346,6 +346,10 @@ function renderList(){
     const open = all.filter(x => x.p.status !== 'done').sort(SORTS[SORT].fn);
     const done = all.filter(x => x.p.status === 'done').sort((a,b) => (b.p.done?.at||'').localeCompare(a.p.done?.at||'')).slice(0, 20);
     $('listOpen').innerHTML = open.length ? open.map(itemHtml).join('') : '<p class="mut">沒有待回報的採購單。</p>';
+    // 2026-11-26（Jay）：已完成的單預設隱藏，點「已完成 N 張」才展開；搜尋時有符合的已完成單就自動展開
+    const doneAll = all.filter(x => x.p.status === 'done').length;
+    $('doneSum').textContent = `已完成 ${doneAll} 張（點開看最近 ${Math.min(20, doneAll)} 張，可點開修改）`;
+    if (q && done.length) $('doneBox').open = true;
     $('listDone').innerHTML = done.length ? done.map(itemHtml).join('') : '<p class="mut">還沒有回報紀錄。</p>';
     el.querySelectorAll('.po-item').forEach(b => b.onclick = () => openForm(b.dataset.po));
   };
