@@ -95,6 +95,14 @@
       <div id="lock2" class="lock"></div>
     </div>
 
+    <div class="card">
+      <h2>③ 結案已入庫的 B2C 採購單</h2>
+      <div class="sub" style="margin-bottom:10px">第 2 段入庫完會自動把「全部接收、全部入庫」的心茶B2C 採購單標記為已完成。這裡是補做：掃全部還沒標記完成的，先列清單，你按確認才標記（不能復原）。收不滿或沒入完的只列出來，請到 SG 手動處理。B2B 採購單不在這裡，由 B2B 回報系統自動處理。</div>
+      <button id="lockScan" class="sec" disabled>🔒 掃描可以結案的採購單</button>
+      <div id="lockBox"></div>
+      <div id="lock3" class="lock"></div>
+    </div>
+
     <div id="jobs"></div>
   </section>
 
@@ -120,7 +128,7 @@ const firebaseConfig = {
   messagingSenderId: "175590672953",
   appId: "1:175590672953:web:6304ddce7b45b191529be8"
 };
-const VERSION = 'xintea-ship-2026-11-24-2';
+const VERSION = 'xintea-ship-2026-11-26-1';
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth(), db = firebase.firestore();
 const COL = 'xintea_b2b_jobs';
@@ -189,6 +197,7 @@ function applyLocks() {
   const lock = (gate) => can(gate) ? '' : '🔒 這個按鈕設定成只限管理者';
   $('start1').disabled = !user || !can('start1'); $('lock1').textContent = user ? lock('start1') : '';
   $('start2').disabled = !user || !can('start2'); $('lock2').textContent = user ? lock('start2') : '';
+  $('lockScan').disabled = !user || !can('start2'); $('lock3').textContent = user ? lock('start2') : '';   // 結案跟第 2 段同一個權限
   const editable = !!user && (isAdmin() || !(S.admins || []).length);
   $('gateTable').innerHTML = GATES.map(([k, n]) => `<tr><td>${esc(n)}</td><td><select data-g="${k}" ${editable ? '' : 'disabled'}>
     <option value="staff" ${(S.gates || {})[k] !== 'admin' ? 'selected' : ''}>同仁都能按</option>
@@ -241,6 +250,10 @@ function watch() {
     refreshWD();
     renderJobs();
   }, (e) => { $('jobs').innerHTML = `<div class="card" style="color:var(--bad)">讀取工作失敗：${esc(e.message)}</div>`; }));
+  unsubs.push(db.collection(COL).where('type', '==', 'b2cLockSweep').onSnapshot((s) => {
+    lockJobs = s.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+    renderLock();
+  }, (e) => { $('lockBox').innerHTML = `<div class="note bad">讀取結案工作失敗：${esc(e.message)}</div>`; }));
 }
 
 // 補跑類按鈕在卡片下面，新工作卡片會出現在最上面 → 送出後捲到最上面並提示（2026-11-20 Jay：按了畫面沒變，以為沒送出）
@@ -287,6 +300,53 @@ window.rerunGiftbox = async (id) => {
   if (!confirm(`重跑 心茶${j.mmdd}${j.label ? '（' + j.label + '）' : ''} 的禮盒增加數和 SG 採購單？\n抓未來 ${windowDays} 天（上方欄位的天數）。\n\n今天的快照如果已經上傳過，會直接用那筆匯出；天數不一樣會停下來提醒你。`)) return;
   try { await addJob({ type: 'b2cStart', only: 'giftbox', label: j.label || '', windowDays, mmdd: j.mmdd }); sentNotice('✅ 已送出「重跑禮盒＋採購單」，進度看下面最上面那張卡片'); } catch (e) { alert('送出失敗：' + e.message); }
 };
+/* ---- ③ 結案已入庫的 B2C 採購單（b2cLockSweep，2026-11-26）----
+   掃描＝預覽工作；預覽完成後勾選要結案的，按確認送 apply 工作（parent＝那次預覽）。
+   lockView 是純函式（tests/test-ship-web.js 會測）：jobs → 要畫的東西 */
+function lockView(jobs) {
+  const sweeps = jobs.filter((j) => j.type === 'b2cLockSweep').sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  const prev = sweeps.filter((j) => !j.apply).pop();
+  if (!prev) return { state: 'none' };
+  const apply = sweeps.filter((j) => j.apply && j.parent === prev.id).pop() || null;
+  const r = prev.result || {};
+  return { state: prev.status, prev, apply, ready: r.ready || [], notDone: r.notDone || [], errors: r.errors || [] };
+}
+/* ---- end lockView ---- */
+let lockJobs = [];
+function renderLock() {
+  const v = lockView(lockJobs), box = $('lockBox');
+  if (v.state === 'none') { box.innerHTML = ''; return; }
+  const when = `${tw(v.prev.createdAt)} ${esc(v.prev.by || '')}`;
+  if (v.state !== 'done') {
+    box.innerHTML = `<div class="note${v.state === 'error' ? ' bad' : ''}">${v.state === 'error' ? '掃描失敗：' + esc(v.prev.error || '') : '掃描中…（' + when + '）'}</div>`;
+    return;
+  }
+  const notDone = v.notDone.length ? `<details style="margin-top:8px"><summary class="sub">還沒收滿／沒入完 ${v.notDone.length} 張（不會結案，請到 SG 手動處理）</summary><table>${
+    v.notDone.map((x) => `<tr><td>PO-${esc(x.po)}</td><td>${esc(x.ref)}<div class="sub">${esc((x.why || []).join('、'))}</div></td></tr>`).join('')}</table></details>` : '';
+  const errs = v.errors.length ? `<div class="note bad">${esc(v.errors.join('\n'))}</div>` : '';
+  let action = '';
+  if (v.apply) {
+    const a = v.apply, ar = a.result || {};
+    action = a.status === 'done' ? `<div class="note">✅ 已結案 ${(ar.locked || []).length} 張${(ar.locked || []).length ? '：' + esc(ar.locked.map((x) => 'PO-' + x.po).join('、')) : ''}${(ar.notDone || []).length ? `\n${ar.notDone.length} 張重新檢查時不符合條件，沒有結案` : ''}${(ar.errors || []).length ? '\n⚠ ' + esc(ar.errors.join('\n')) : ''}</div>`
+      : a.status === 'error' ? `<div class="note bad">結案失敗：${esc(a.error || '')}</div>` : '<div class="note">結案中…</div>';
+  } else if (v.ready.length) {
+    action = `<table>${v.ready.map((x, i) => `<tr><td><label><input type="checkbox" class="lockPick" data-i="${i}" checked> PO-${esc(x.po)}</label></td><td>${esc(x.ref)}<div class="sub">${esc(x.date || '')}</div></td></tr>`).join('')}</table>
+      <button class="big" style="margin-top:8px" onclick="doLock()">確認結案勾選的採購單（不能復原）</button>`;
+  }
+  box.innerHTML = `<div class="sub" style="margin-top:10px">掃描：${when}　可以結案 ${v.ready.length} 張</div>${v.ready.length || v.apply ? '' : '<div class="note">沒有可以結案的採購單</div>'}${action}${errs}${notDone}`;
+}
+$('lockScan').onclick = async () => {
+  if (!confirm('掃描全部還沒標記完成的心茶B2C 採購單？\n（只讀，不會改 SG；掃完會列出可以結案的單讓你確認）')) return;
+  try { await addJob({ type: 'b2cLockSweep' }); } catch (e) { alert('送出失敗：' + e.message); }
+};
+window.doLock = async () => {
+  const v = lockView(lockJobs);
+  const pos = [...document.querySelectorAll('.lockPick')].filter((c) => c.checked).map((c) => v.ready[Number(c.dataset.i)]).filter(Boolean).map((x) => x.po);
+  if (!pos.length) return alert('沒有勾選要結案的採購單');
+  if (!confirm(`在 SG 把這 ${pos.length} 張標記為已完成（含「入庫標記為已完成」）？\n${pos.map((p) => 'PO-' + p).join('、')}\n\n工作程式會再檢查一次「全部接收、全部入庫」才標記。標記後不能復原。`)) return;
+  try { await addJob({ type: 'b2cLockSweep', apply: true, pos, parent: v.prev.id }); } catch (e) { alert('送出失敗：' + e.message); }
+};
+
 // 補上傳新竹：只處理這一次「出貨開始」的物流表；工作程式會先查有沒有上傳過、新竹上有沒有同電話的單，避免重複
 window.rerunHct = async (id, onlyLabels) => {
   const j = lastJobs.find((x) => x.id === id) || {};

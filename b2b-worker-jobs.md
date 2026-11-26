@@ -814,3 +814,30 @@ shipment.html 現況核對（v2026-11-25-129，比交接寫的 128 新）：
 2. 用託運單號對：第 1 段上傳新竹時就拿得到託運單號，做成跟 `shipment_carrier_lookup` 一樣的對照，最可靠。
 
 交接提的第二輪主要是幫暮雨；shipment.html 兩家共用，要不要為暮雨做另外決定。
+
+## 17. 心茶B2C 採購單全部入庫 → 標記為已完成（Jay 2026-11-26）
+
+Jay：希望一鍵把「心茶 B2C 已經完全入庫」的採購單標示完成（SG「標記為已完成」＋勾「將入庫標記為已完成」）。B2B 採購單維持 `scanSG` 原本的自動鎖單條件（做完＋配送單全部寄出＋SG 接收數＝回報數），不改。
+
+### 17-1 條件
+
+每個品項 採購數量 > 0、**已接收＝採購數量、已入庫＝採購數量**（`poFullyStocked`）。有一項不符就不鎖；收不滿的單**不強制結案**，只列出原因（例如 `AA00376 已接收 8/10`），由 Jay 到 SG 手動處理。參考編號含 B2B 的不碰。
+
+### 17-2 第 2 段自動做（b2c-ship-2026-11-26-1）
+
+`stockIn`（① SG 入庫）每張採購單處理完（本來就入好、或剛入完）符合 17-1 → 用 b2b-worker 的 `sgUpdate(page, id, { lock: true })` 鎖單（跟 B2B 自動鎖單同一個 PUT），讀回確認 `status === 0`。
+- 結果 `R.stockIn.locked`、`R.stockIn.lockErrors`；鎖單失敗**不影響**後面的出貨流程，只寫 log。
+- 試跑只列出「正式跑會標記為已完成」。
+- 第 2 段只看最近 14 天、最新 20 張（原本的入庫範圍）。
+
+### 17-3 工作台按鈕（新工作 `b2cLockSweep`，xintea-ship-2026-11-26-1）
+
+- 「🔒 掃描可以結案的採購單」→ `{type:'b2cLockSweep'}`：翻頁掃全部（每頁 100、最多 30 頁）還沒鎖的心茶B2C 採購單，不改 SG。結果 `ready:[{po,ref,date}]`、`notDone:[{po,ref,date,why[]}]`、`errors`。
+- 網頁列出 ready（預設全勾）→「確認結案」→ `{type:'b2cLockSweep', apply:true, pos:[761,…], parent:預覽工作id}`。工作程式每張**再讀一次**確認仍符合才鎖；不符合的放 `notDone`，找不到或已鎖的寫 `errors`。
+- 權限：跟第 2 段同一個關卡 `start2`（b2c-start.js `GATED`、網頁按鈕都一樣）。
+
+### 實作狀態（2026-11-26）
+
+- b2c-ship-2026-11-26-1、b2b-worker-2026-11-26-1（傳 `sgUpdate` 給 b2c-ship）、b2c-start-2026-11-26-1（`GATED` 加 `b2cLockSweep`）。備份：`b2c-ship.js.bak_2026-11-24-5`、`b2b-worker.js.bak_2026-11-24-2`、`b2c-start.js.bak_2026-11-24-4`。
+- 測試：`tests/test-b2c-lock.js`（假 SG，29 項）、`tests/test-ship-web.js` 加 ③（29/29）；既有 test-sg-wait、test-ship-parent、test-worker-listen、test-ocr-progress、test-hct-batch、test-nostock-move、test-shipdate 都通過。test-detail-split 舊版就失敗（`orderKey is not defined`，跟這次無關）；test-rethrow 要 Linux `python3`，Windows 沒跑。
+- **還沒對真的 SG 跑過**：重開 `start-b2b-worker.bat` 後先按掃描看清單，確認一張再看 SG 頁面是否顯示已完成、入庫已完成。
