@@ -841,3 +841,18 @@ Jay：希望一鍵把「心茶 B2C 已經完全入庫」的採購單標示完成
 - b2c-ship-2026-11-26-1、b2b-worker-2026-11-26-1（傳 `sgUpdate` 給 b2c-ship）、b2c-start-2026-11-26-1（`GATED` 加 `b2cLockSweep`）。備份：`b2c-ship.js.bak_2026-11-24-5`、`b2b-worker.js.bak_2026-11-24-2`、`b2c-start.js.bak_2026-11-24-4`。
 - 測試：`tests/test-b2c-lock.js`（假 SG，29 項）、`tests/test-ship-web.js` 加 ③（29/29）；既有 test-sg-wait、test-ship-parent、test-worker-listen、test-ocr-progress、test-hct-batch、test-nostock-move、test-shipdate 都通過。test-detail-split 舊版就失敗（`orderKey is not defined`，跟這次無關）；test-rethrow 要 Linux `python3`，Windows 沒跑。
 - **還沒對真的 SG 跑過**：重開 `start-b2b-worker.bat` 後先按掃描看清單，確認一張再看 SG 頁面是否顯示已完成、入庫已完成。
+
+## 18. B2B 鎖單條件放寬、找配送單用生產單現在的到貨日（Jay 2026-11-26，b2b-worker-2026-11-26-2）
+
+### 18-1 鎖單：回報已完成＋SG 已接收＝採購數量
+
+- 舊條件（第 6 節）要配送大表「已寄出日期」全部有值。2026-11-26 檢查：已完成的 7 張（PO-0716、0717、0718、0743、0745、0746、0764）**全部沒鎖**——每張的配送單「已寄出 0 列」，而且 scanSG 只在回報送出、啟動時跑，之後補填寄出日期也沒人再掃。
+- Jay：改成 `status === 'done'` 而且每個品項 SG 已接收（含這次補接收）＝採購數量（`b2bFullyReceived`）就鎖。SG 接收數跟回報不一致時照樣鎖，但寫 log。沒收滿的寫 `result.still`（例如 `PO-0747 已完成但 SG 還沒全部接收：AA00342 70/76`）。
+- 啟動時「已完成但 SG 沒鎖」的也排一次 `scanSG`（原本只排 sync 沒打勾的）。依 Firestore 存的接收數，重開後上面 7 張都會鎖。
+
+### 18-2 配送單：用生產單大表現在的最早／最晚到貨日
+
+- PO-0747（喜餅＿謝依璇，生產單 20261030-7）：建單時 EIP 讀到最早到貨 12/09，生產單大表現在是 12/05～12/07；配送單 心茶配送單-20261123-1 到貨 12/05 → 5-14 的範圍算成 12/6～12/11，被判成「日期都不在這批範圍內」。心茶自己表上「對應配送單號」的公式也是用生產單現在的最早到貨日對配送大表。
+- 改法：`shipFor`（printShip、建單後找配送單）、`fetchDocs`、`cleanShip`、`otherBatches` 找配送單前，用生產單大表（`生產單號`、`最早到貨日`、`最晚到貨日`）覆蓋 `src[].earliest／latest`（`withFreshDates`）。有變就寫回採購單（`src`、`srcDatesFixedAt`，卡片的最早到貨日跟著更新），`result.still` 寫例如 `PO-0747 生產單到貨日有改：20261030-7 12/9～12/11 → 12/5～12/7（照生產單大表更新）`。讀不到大表照舊用建單時的日期。
+- 備份：`b2b-worker.js.bak_2026-11-26-1`。測試：`tests/test-b2b-lock-dates.js`（17 項，含重現 PO-0747）。
+- **還沒實際跑**：重開 `start-b2b-worker.bat` → 啟動會自動掃 7 張鎖單；PO-0747 按「找配送單並列印」應找到 20261123-1 並列印（託運單要放厚紙）。
