@@ -54,6 +54,32 @@ else {
   check('沒有出廠日的舊紀錄也列出（不寫出廠日）', /心茶1123（上午）/.test(c.text || '') && !/出廠日/.test(c.text || ''), c.text);
 }
 
+// ---- ③ 結案已入庫的 B2C 採購單（b2cLockSweep，2026-11-26）----
+check('③ 有「掃描可以結案的採購單」按鈕', /id="lockScan"/.test(html));
+check('③ 掃描送出 b2cLockSweep（預覽，不帶 apply）', /addJob\(\{ type: 'b2cLockSweep' \}\)/.test(html));
+check('③ 確認送出 apply:true、pos、parent', /type: 'b2cLockSweep', apply: true, pos, parent/.test(html));
+check('③ 跟第 2 段同一個權限（start2）', /\$\('lockScan'\)\.disabled = !user \|\| !can\('start2'\)/.test(html));
+check('③ 版本號 > xintea-ship-2026-11-24-2', ver && ver > 'xintea-ship-2026-11-24-2', ver);
+{
+  const f2 = html.indexOf('function lockView('), t2 = html.indexOf('/* ---- end lockView ---- */');
+  check('找得到 lockView', f2 >= 0 && t2 > f2);
+  if (f2 >= 0 && t2 > f2) {
+    const ctx = {}; vm.createContext(ctx); vm.runInContext(html.slice(f2, t2) + '\nthis.f = lockView;', ctx);
+    check('沒有掃描過 → none', ctx.f([]).state === 'none');
+    const jobs = [
+      { id: 'p1', type: 'b2cLockSweep', status: 'done', createdAt: '2026-11-26T01:00:00Z', result: { ready: [{ po: 1 }], notDone: [] } },
+      { id: 'p2', type: 'b2cLockSweep', status: 'done', createdAt: '2026-11-26T02:00:00Z', result: { ready: [{ po: 761 }, { po: 762 }], notDone: [{ po: 763, why: ['x'] }] } },
+      { id: 'a1', type: 'b2cLockSweep', apply: true, parent: 'p1', status: 'done', createdAt: '2026-11-26T01:30:00Z' },
+    ];
+    const v = ctx.f(jobs);
+    check('用最新一次預覽', v.prev.id === 'p2' && v.ready.length === 2 && v.notDone.length === 1);
+    check('舊預覽的確認工作不算在新預覽上', v.apply === null);
+    jobs.push({ id: 'a2', type: 'b2cLockSweep', apply: true, parent: 'p2', status: 'running', createdAt: '2026-11-26T02:05:00Z' });
+    check('新預覽的確認工作接得上', ctx.f(jobs).apply.id === 'a2');
+    check('掃描中', ctx.f([{ id: 'p', type: 'b2cLockSweep', status: 'running', createdAt: 'x' }]).state === 'running');
+  }
+}
+
 const bad = results.filter((x) => !x).length;
 console.log(bad ? `失敗 ${bad}/${results.length}` : `全部通過 ${results.length}/${results.length}`);
 process.exit(bad ? 1 : 0);
